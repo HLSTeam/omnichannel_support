@@ -1,0 +1,22 @@
+POST http://localhost:3000/api/v1/systems
+Content-Type: application/json
+
+{
+    "name": "Hệ thống Bán thẻ A"
+}
+
+####
+GET http://localhost:3000/api/v1/systems
+Content-Type: application/json
+
+#####
+PUT http://localhost:3000/api/v1/systems/93aab879-fccc-4bf7-817d-31c45a37c62e
+Content-Type: application/json
+
+{
+    "channels": {
+        "telegram": {
+            "token": "7858972455:AAFnIJnAvTJ2UrP-Dk9U_6YGtTDYF-XZQW8" 
+        }
+    }
+}
