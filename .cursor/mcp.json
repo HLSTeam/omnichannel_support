@@ -1,0 +1,15 @@
+{
+    "mcpServers": {
+      "n8n-mcp": {
+        "command": "npx",
+        "args": ["n8n-mcp"],
+        "env": {
+          "MCP_MODE": "stdio",
+          "LOG_LEVEL": "error",
+          "DISABLE_CONSOLE_OUTPUT": "true",
+          "N8N_API_URL": "https://n8n.hls.vn",
+          "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NDUwZTFlMy0yMDAwLTQ2ZTQtOTc5My00ZDNlNTU0YWRjMzIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzU1Njc3MDU0LCJleHAiOjE3NjA4NDY0MDB9.iyLN8Iq2myJVUxBkBSO8BAN_7UNBcnup1OllLtAhho8"
+        }
+      }
+    }
+  }

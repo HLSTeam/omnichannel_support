@@ -1,0 +1,128 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  AGENT
+  ADMIN
+}
+
+model Agent {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  name      String
+  password  String // Will store a securely hashed password
+  role      Role      @default(AGENT)
+  createdAt DateTime  @default(now())
+  Message   Message[]
+  broadcastSessions BroadcastSession[]
+}
+
+model System {
+  id            String         @id @default(uuid())
+  name          String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  channels      Channel[]
+  conversations Conversation[] // Một hệ thống có thể có nhiều cuộc trò chuyện
+  rules         Rule[]
+}
+
+model Channel {
+  id            String         @id @default(uuid())
+  type          String
+  token         String?
+  systemId      String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  system        System         @relation(fields: [systemId], references: [id])
+  conversations Conversation[] // Một kênh có thể có nhiều cuộc trò chuyện
+
+  @@unique([systemId, type])
+}
+
+// --- MODEL MỚI: Cuộc trò chuyện ---
+model Conversation {
+  id             String   @id @default(uuid())
+  // ID của cuộc trò chuyện từ phía nền tảng (VD: chat.id của Telegram)
+  platformChatId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  name String? // Tên của cuộc trò chuyện (tên nhóm hoặc tên người dùng)
+  type String // 'private', 'group', hoặc 'supergroup'
+
+  systemId String
+  system   System @relation(fields: [systemId], references: [id])
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id])
+
+  // Một cuộc trò chuyện có nhiều tin nhắn
+  messages Message[]
+
+  // Đảm bảo không có 2 cuộc trò chuyện trùng platformChatId trên cùng một kênh
+  @@unique([channelId, platformChatId])
+}
+
+// --- MODEL MỚI: Tin nhắn ---
+model Message {
+  id                String       @id @default(uuid())
+  // ID của tin nhắn từ phía nền tảng (VD: message_id của Telegram)
+  platformMessageId String       @unique
+  text              String? // Nội dung tin nhắn
+  sender            String // Ai là người gửi? "USER" hoặc "AGENT"
+  createdAt         DateTime     @default(now())
+  agentId           String? // The ID of the agent who sent the message
+  agent             Agent?       @relation(fields: [agentId], references: [id])
+  conversationId    String
+  conversation      Conversation @relation(fields: [conversationId], references: [id])
+}
+
+model Rule {
+  id        String   @id @default(uuid())
+  keyword   String // Từ khóa để kích hoạt
+  response  String   @db.Text // Nội dung bot sẽ trả lời, dùng @db.Text để có thể lưu nội dung dài
+  systemId  String
+  createdAt DateTime @default(now())
+
+  // Quan hệ: Một luật thuộc về một hệ thống
+  system System @relation(fields: [systemId], references: [id])
+
+  // Đảm bảo từ khóa là duy nhất trong phạm vi một hệ thống
+  @@unique([systemId, keyword])
+}
+
+enum BroadcastStatus {
+  PENDING   // Đang chờ Admin xác nhận
+  EXECUTING // Đang trong quá trình gửi
+  SENT      // Đã gửi xong
+  CANCELLED // Đã hủy
+}
+
+model BroadcastSession {
+  id          String   @id @default(uuid())
+  content     String   @db.Text // Nội dung tin nhắn cuối cùng đã được chốt
+
+  // Bộ lọc để xác định người nhận
+  filtersJson String   @db.Json // Lưu bộ lọc dưới dạng chuỗi JSON
+
+  // Thống kê xem trước
+  targetCount Int      // Số lượng nhóm chat sẽ nhận được tin
+  targetIds   String[] // Danh sách các platformChatId của các nhóm sẽ nhận
+
+  status      BroadcastStatus @default(PENDING)
+  createdAt   DateTime        @default(now())
+  executedAt  DateTime?       // Thời gian bắt đầu thực thi gửi
+
+  // Ai là người ra lệnh?
+  createdByAgentId String
+  createdByAgent   Agent  @relation(fields: [createdByAgentId], references: [id])
+}

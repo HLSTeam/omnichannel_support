@@ -1,0 +1,67 @@
+POST http://localhost:3000/api/v1/systems
+Content-Type: application/json
+
+{
+    "name": "Hệ thống Bán thẻ A"
+}
+
+####
+GET http://localhost:3000/api/v1/systems
+Content-Type: application/json
+
+#####
+PUT http://localhost:3000/api/v1/systems/d83bfd68-65fe-42a5-9a17-475512099981
+Content-Type: application/json
+
+{
+    "name": "Hệ thống NineTech",
+    "channels": {
+        "telegram": {
+            "token": "7858972455:AAFnIJnAvTJ2UrP-Dk9U_6YGtTDYF-XZQW8" 
+        }
+    }
+}
+
+#####
+POST http://localhost:3000/api/v1/auth/register
+Content-Type: application/json
+
+{
+    "name": "Agent 1",
+    "email": "namnl@hls.vn",
+    "password": "123456"
+}
+
+#####
+POST http://localhost:3000/api/v1/auth/login
+Content-Type: application/json
+
+{
+    "email": "namnl@hls.vn",
+    "password": "123456"
+}
+
+###
+GET https://n8n.hls.vn/webhook-test/dd7b0d39-51a7-470e-8364-450cf0f4860e?abc=123
+Content-Type: application/json
+
+{
+    "name": "Hệ thống Bán thẻ A",
+    "channel": "telegram",
+    "data": {
+        "message": "Test message from n8n"
+    }
+}
+
+###
+POST https://c70e74b14cae.ngrok-free.app/api/v1/inbound/telegram
+Content-Type: application/json
+x-api-key: abd60b81-f8e2-47bf-99c6-76ef0ff3b3a0
+
+{
+    "systemId": "d83bfd68-65fe-42a5-9a17-475512099981",
+    "chat": 123456788,
+    "message": {
+        "text": "Test message from n8n"
+    }
+}
