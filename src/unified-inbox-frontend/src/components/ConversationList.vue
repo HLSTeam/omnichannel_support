@@ -71,45 +71,46 @@ const getConversationName = (conversation) => {
 </script>
 
 <template>
-  <div class="p-2 h-full overflow-y-auto">
-    <h2 class="text-lg font-semibold mb-2 p-2">Cuộc trò chuyện</h2>
-
-    <div v-if="conversations.length === 0" class="text-gray-400 text-center mt-8">
-      Chưa có cuộc trò chuyện nào.
+  <div class="h-full overflow-y-auto min-h-0">
+    <div v-if="conversations.length === 0" class="text-center mt-8 p-4">
+      <div class="text-3xl mb-3">💬</div>
+      <p class="text-slate-500">Chưa có cuộc trò chuyện nào.</p>
     </div>
 
-    <ul v-else class="space-y-1">
+    <ul v-else class="space-y-2 p-4">
       <li
         v-for="convo in conversations"
         :key="convo.id"
         @click="emit('select-conversation', convo.id)"
         :class="[
-          'p-3 rounded-lg cursor-pointer transition-colors',
-          activeId === convo.id ? 'bg-cyan-600' : 'hover:bg-gray-600'
+          'p-3 rounded-lg cursor-pointer transition-all duration-200 border border-transparent',
+          activeId === convo.id 
+            ? 'bg-blue-600 text-white shadow-md' 
+            : 'bg-white hover:bg-slate-50 hover:border-slate-200 text-slate-700 border border-slate-100'
         ]"
       >
         <!-- Tên conversation -->
-        <div class="flex items-center justify-between mb-1">
-          <p class="font-bold truncate text-white">
+        <div class="flex items-center justify-between mb-2">
+          <p class="font-semibold truncate" :class="activeId === convo.id ? 'text-white' : 'text-slate-800'">
             {{ getConversationName(convo) }}
           </p>
-          <span v-if="getLastMessageInfo(convo).time" class="text-xs text-gray-400">
+          <span v-if="getLastMessageInfo(convo).time" class="text-xs" :class="activeId === convo.id ? 'text-blue-100' : 'text-slate-500'">
             {{ getLastMessageInfo(convo).time }}
           </span>
         </div>
 
         <!-- Thông tin người gửi và tin nhắn -->
         <div v-if="getLastMessageInfo(convo).sender" class="space-y-1">
-          <p class="text-sm text-cyan-400 font-medium">
+          <p class="text-sm font-medium" :class="activeId === convo.id ? 'text-blue-100' : 'text-slate-600'">
             {{ getLastMessageInfo(convo).sender }}
           </p>
-          <p v-if="getLastMessageInfo(convo).text" class="text-sm text-gray-300 truncate">
+          <p v-if="getLastMessageInfo(convo).text" class="text-sm truncate" :class="activeId === convo.id ? 'text-blue-200' : 'text-slate-500'">
             {{ getLastMessageInfo(convo).text }}
           </p>
         </div>
 
         <!-- Fallback khi không có tin nhắn -->
-        <p v-else class="text-sm text-gray-400 italic">
+        <p v-else class="text-sm italic" :class="activeId === convo.id ? 'text-blue-200' : 'text-slate-400'">
           Chưa có tin nhắn
         </p>
       </li>

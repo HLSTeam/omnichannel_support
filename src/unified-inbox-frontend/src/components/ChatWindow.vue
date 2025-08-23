@@ -68,7 +68,7 @@ const isUserMessage = (message) => message.sender === 'USER';
 
 watch(() => props.conversation?.id, async (newId) => {
   if (newId) {
-    const response = await apiClient.get(`/conversations/${newId}/messages`);
+    const response = await apiClient.get(`/api/v1/conversations/${newId}/messages`);
     messages.value = response.data;
     scrollToBottom();
   } else {
@@ -88,7 +88,7 @@ const sendMessage = async () => {
   // Không gửi nếu không có nội dung hoặc chưa chọn cuộc trò chuyện
   if (!newMessageText.value.trim() || !props.conversation?.id) return;
   try {
-    await apiClient.post('/messages', {
+    await apiClient.post('/api/v1/messages', {
       conversationId: props.conversation.id,
       text: newMessageText.value,
     });
@@ -101,48 +101,64 @@ const sendMessage = async () => {
 </script>
 
 <template>
-  <div v-if="!conversation" class="flex items-center justify-center h-full text-gray-500">
-    Hãy chọn một cuộc trò chuyện để bắt đầu
+  <div v-if="!conversation" class="flex items-center justify-center h-full text-slate-600">
+    <div class="text-center">
+      <div class="text-4xl mb-4">💬</div>
+      <h3 class="text-lg font-semibold mb-2 text-slate-800">Chọn cuộc trò chuyện</h3>
+      <p class="text-sm text-slate-600">Hãy chọn một cuộc trò chuyện để bắt đầu chat</p>
+    </div>
   </div>
-  <div v-else class="flex flex-col h-full">
-    <header class="bg-gray-800 p-4 border-b border-gray-600">
-      <h3 class="font-bold text-lg truncate">
-        {{ conversation.name || `Chat ID: ${conversation.platformChatId}` }}
-      </h3>
-    </header>
+  <div v-else class="flex flex-col h-full min-h-0">
+    <!-- Chat Messages Area - Scrollable -->
+    <div ref="chatContainer" class="flex-1 overflow-y-auto bg-gradient-to-br from-slate-50 to-blue-50 p-4 min-h-0">
+      <!-- Empty state khi chưa có tin nhắn -->
+      <div v-if="messages.length === 0" class="flex items-center justify-center min-h-[200px]">
+        <div class="text-center text-slate-500">
+          <div class="text-6xl mb-4">💬</div>
+          <p class="text-lg font-medium">Chưa có tin nhắn nào</p>
+          <p class="text-sm">Hãy bắt đầu cuộc trò chuyện!</p>
+        </div>
+      </div>
+      
+      <!-- Tin nhắn -->
+      <div v-else class="space-y-4">
+        <div v-for="msg in messages" :key="msg.id" :class="isUserMessage(msg) ? 'flex justify-start' : 'flex justify-end'">
+          <div :class="isUserMessage(msg) ? 'bg-white border border-slate-200 shadow-sm' : 'bg-gradient-to-r from-blue-600 to-blue-700 shadow-md'" class="rounded-2xl p-4 max-w-lg">
+            
+            <!-- Tên người gửi -->
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-semibold" :class="isUserMessage(msg) ? 'text-slate-700' : 'text-blue-100'">
+                {{ getSenderName(msg) }}
+              </p>
+              <span class="text-xs opacity-80" :class="isUserMessage(msg) ? 'text-slate-500' : 'text-blue-200'">
+                {{ formatTime(msg.createdAt) }}
+              </span>
+            </div>
 
-    <div ref="chatContainer" class="flex-1 p-4 space-y-4 overflow-y-auto">
-      <div v-for="msg in messages" :key="msg.id" :class="isUserMessage(msg) ? 'flex justify-start' : 'flex justify-end'">
-        <div :class="isUserMessage(msg) ? 'bg-gray-600' : 'bg-cyan-600'" class="rounded-lg p-3 max-w-lg">
-          
-          <!-- Tên người gửi -->
-          <div class="flex items-center justify-between mb-2">
-            <p class="text-xs font-bold" :class="isUserMessage(msg) ? 'text-gray-300' : 'text-cyan-200'">
-              {{ getSenderName(msg) }}
-            </p>
-            <span class="text-xs opacity-70" :class="isUserMessage(msg) ? 'text-gray-400' : 'text-cyan-300'">
-              {{ formatTime(msg.createdAt) }}
-            </span>
+            <!-- Nội dung tin nhắn -->
+            <p class="text-sm leading-relaxed" :class="isUserMessage(msg) ? 'text-slate-800' : 'text-white'">{{ msg.text }}</p>
           </div>
-
-          <!-- Nội dung tin nhắn -->
-          <p class="text-sm">{{ msg.text }}</p>
         </div>
       </div>
     </div>
 
-    <footer class="bg-gray-800 p-4">
-      <form @submit.prevent="sendMessage" class="flex items-center bg-gray-700 rounded-lg">
+    <!-- Input Box - Always Fixed at Bottom -->
+    <div class="flex-shrink-0 bg-white/95 backdrop-blur-sm p-4 border-t border-slate-200 shadow-xl">
+      <form @submit.prevent="sendMessage" class="flex items-center bg-white border-2 border-slate-200 rounded-2xl focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 transition-all duration-200">
         <input 
           type="text" 
           placeholder="Nhập tin nhắn..." 
-          class="flex-1 bg-transparent p-3 focus:outline-none"
+          class="flex-1 bg-transparent p-4 text-slate-800 placeholder-slate-400 focus:outline-none text-sm"
           v-model="newMessageText"
         >
-        <button type="submit" class="p-3 text-cyan-400 hover:text-cyan-300">
-          <SendHorizonal />
+        <button 
+          type="submit" 
+          :disabled="!newMessageText.trim()"
+          class="p-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-r-2xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <SendHorizonal class="w-5 h-5" />
         </button>
       </form>
-    </footer>
+    </div>
   </div>
 </template>

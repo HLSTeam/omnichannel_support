@@ -10,7 +10,7 @@ const error = ref(null);
 
 const handleLogin = async () => {
   try {
-    const response = await apiClient.post('/auth/login', {
+    const response = await apiClient.post('/api/v1/auth/login', {
       email: email.value,
       password: password.value,
     });
@@ -18,10 +18,15 @@ const handleLogin = async () => {
     // Save the token to localStorage
     localStorage.setItem('authToken', response.data.token);
     localStorage.setItem('agentProfile', JSON.stringify(response.data.agent));
+    localStorage.setItem('user', JSON.stringify(response.data.agent)); // Add this for router guard
 
 
-    // Redirect to the dashboard
-    router.push('/');
+    // Redirect based on role
+    if (response.data.agent.role === 'ADMIN') {
+      router.push('/admin');
+    } else {
+      router.push('/');
+    }
 
   } catch (err) {
     error.value = 'Invalid email or password.';
