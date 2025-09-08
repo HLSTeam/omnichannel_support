@@ -114,7 +114,7 @@
         <!-- Conversation (Optional) -->
         <div>
           <label for="conversation" class="block text-sm font-medium text-slate-700 mb-2">
-            Related Conversation (Optional)
+            Related Conversation (Optional) - Leave empty if no conversation
           </label>
           <select
             id="conversation"
@@ -285,19 +285,13 @@ const handleSubmit = async () => {
   try {
     loading.value = true;
     
-    // Validate required fields
-    if (!form.value.conversationId) {
-      alert('Please select a conversation');
-      return;
-    }
-    
-    // Use conversationId from form
+    // Use conversationId from form (optional)
     const ticketData = {
       title: form.value.title,
       description: form.value.description,
       priority: form.value.priority,
       category: form.value.category,
-      conversationId: form.value.conversationId,
+      conversationId: form.value.conversationId || null,
       assignedTo: form.value.assignedTo || null,
       aiAssisted: form.value.aiAssisted
     };

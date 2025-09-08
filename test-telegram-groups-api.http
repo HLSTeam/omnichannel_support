@@ -1,0 +1,71 @@
+### Test Telegram Groups API
+
+# 1. Get all groups
+GET http://localhost:3000/api/v1/telegram-groups
+
+###
+
+# 2. Get groups by type
+GET http://localhost:3000/api/v1/telegram-groups/admin
+
+###
+
+# 3. Detect group info (public endpoint)
+POST http://localhost:3000/api/v1/telegram-groups/detect
+Content-Type: application/json
+
+{
+    "chatId": "-1001234567890",
+    "chatTitle": "Admin - Quản trị hệ thống",
+    "username": "admin_user"
+}
+
+###
+
+# 4. Get chat IDs for n8n workflows (public endpoint)
+GET http://localhost:3000/api/v1/telegram-groups/chat-ids
+
+###
+
+# 5. Get chat IDs by specific types
+GET http://localhost:3000/api/v1/telegram-groups/chat-ids?types=admin,customer
+
+###
+
+# 6. Create new telegram group (requires auth + admin role)
+POST http://localhost:3000/api/v1/telegram-groups
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN
+
+{
+    "groupName": "Test Admin Group",
+    "groupType": "ADMIN",
+    "chatId": "-1001111111111",
+    "description": "Test admin group for development",
+    "chatTitle": "Test Admin - Development"
+}
+
+###
+
+# 7. Update telegram group (requires auth + admin role)
+PUT http://localhost:3000/api/v1/telegram-groups/YOUR_GROUP_ID
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN
+
+{
+    "groupName": "Updated Admin Group",
+    "description": "Updated description",
+    "memberCount": 5
+}
+
+###
+
+# 8. Delete telegram group (requires auth + admin role)
+DELETE http://localhost:3000/api/v1/telegram-groups/YOUR_GROUP_ID
+Authorization: Bearer YOUR_JWT_TOKEN
+
+###
+
+# 9. Hard delete telegram group (requires auth + admin role)
+DELETE http://localhost:3000/api/v1/telegram-groups/YOUR_GROUP_ID?hard=true
+Authorization: Bearer YOUR_JWT_TOKEN

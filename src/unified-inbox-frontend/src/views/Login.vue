@@ -10,7 +10,7 @@ const error = ref(null);
 
 const handleLogin = async () => {
   try {
-    const response = await apiClient.post('/api/v1/auth/login', {
+            const response = await apiClient.post('/auth/login', {
       email: email.value,
       password: password.value,
     });

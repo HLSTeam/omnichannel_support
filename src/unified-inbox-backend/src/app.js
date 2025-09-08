@@ -12,6 +12,12 @@ import ruleRoutes from './routes/rule.routes.js';
 import inboundRoutes from './routes/inbound.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import broadcastRoutes from './routes/broadcast.routes.js';
+import telegramGroupsRoutes from './routes/telegram-groups.routes.js';
+import helpdeskRoutes from './routes/helpdesk.routes.js';
+import agentsRoutes from './routes/agents.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
+import permissionRoutes from './routes/permission.routes.js';
+import userDeclarationsRoutes from './routes/user-declarations.routes.js';
 
 const app = express();
 const httpServer = createServer(app); // <-- Tạo một server HTTP
@@ -30,6 +36,12 @@ app.use('/api/v1/rules', ruleRoutes);
 app.use('/api/v1/inbound', inboundRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/broadcast', broadcastRoutes);
+app.use('/api/v1/telegram-groups', telegramGroupsRoutes);
+app.use('/api/v1/helpdesk', helpdeskRoutes);
+app.use('/api/v1/agents', agentsRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/permissions', permissionRoutes);
+app.use('/api/v1/user-declarations', userDeclarationsRoutes);
 
 const PORT = process.env.PORT || 3000;
 

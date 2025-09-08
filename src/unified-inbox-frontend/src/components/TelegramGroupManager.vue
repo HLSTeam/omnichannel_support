@@ -109,6 +109,13 @@
                   </button>
                   
                   <button
+                    @click="managePermissions(group)"
+                    class="text-purple-600 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-3 py-1 rounded-md text-xs"
+                  >
+                    🔐 Permissions
+                  </button>
+                  
+                  <button
                     @click="toggleGroupStatus(group)"
                     :class="group.isActive ? 'text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100' : 'text-green-600 hover:text-green-900 bg-green-50 hover:bg-green-100'"
                     class="px-3 py-1 rounded-md text-xs"
@@ -144,7 +151,7 @@
       </h3>
       
       <form @submit.prevent="addGroup" class="space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">
               Tên Nhóm *
@@ -175,7 +182,7 @@
           </div>
         </div>
         
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">
               Chat ID *
@@ -184,7 +191,7 @@
               v-model="newGroup.chatId"
               type="text"
               required
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
               placeholder="VD: -1001234567890"
             />
             <p class="text-xs text-gray-500 mt-1">
@@ -310,6 +317,96 @@
       </div>
     </div>
 
+    <!-- Permission Management Modal -->
+    <div v-if="showPermissionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div class="relative top-10 mx-auto p-5 border w-4/5 max-w-4xl shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">🔐 Quản Lý Permissions</h3>
+            <button
+              @click="showPermissionModal = false"
+              class="text-gray-400 hover:text-gray-600"
+            >
+              <span class="text-2xl">×</span>
+            </button>
+          </div>
+          
+          <div v-if="selectedGroupForPermissions" class="space-y-6">
+            <!-- Group Info -->
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <h4 class="font-medium text-gray-900 mb-2">
+                {{ selectedGroupForPermissions.groupName }}
+              </h4>
+              <p class="text-sm text-gray-600">
+                Loại: {{ getGroupTypeLabel(selectedGroupForPermissions.groupType) }} | 
+                Chat ID: {{ selectedGroupForPermissions.chatId }}
+              </p>
+            </div>
+
+            <!-- Permission Templates -->
+            <div>
+              <h5 class="font-medium text-gray-700 mb-3">📋 Permission Templates</h5>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <button
+                  v-for="template in permissionTemplates"
+                  :key="template.role"
+                  @click="applyPermissionTemplate(template.role)"
+                  class="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 text-left"
+                >
+                  <div class="flex items-center mb-2">
+                    <span class="text-xl mr-2">{{ template.icon }}</span>
+                    <span class="font-medium text-sm">{{ template.name }}</span>
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    {{ template.permissions.length }} permissions
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Custom Permissions -->
+            <div>
+              <h5 class="font-medium text-gray-700 mb-3">⚙️ Custom Permissions</h5>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div v-for="permission in availablePermissions" :key="permission.name" class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg">
+                  <input
+                    :id="`perm-${permission.name}`"
+                    type="checkbox"
+                    :checked="groupPermissions.includes(permission.name)"
+                    @change="togglePermission(permission.name)"
+                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label :for="`perm-${permission.name}`" class="text-sm font-medium text-gray-700">
+                    {{ permission.name }}
+                  </label>
+                  <span class="text-xs text-gray-500 ml-auto">
+                    {{ permission.description }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="flex justify-end space-x-3">
+              <button
+                @click="showPermissionModal = false"
+                class="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md text-sm"
+              >
+                Hủy
+              </button>
+              <button
+                @click="saveGroupPermissions"
+                :disabled="isSavingPermissions"
+                class="px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 disabled:bg-gray-400 rounded-md text-sm"
+              >
+                {{ isSavingPermissions ? '💾 Đang lưu...' : '💾 Lưu Permissions' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Success/Error Messages -->
     <div v-if="message" :class="messageType === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700'" class="fixed top-4 right-4 border px-4 py-3 rounded z-50">
       {{ message }}
@@ -334,6 +431,12 @@ export default {
     const isUpdating = ref(false);
     const message = ref('');
     const messageType = ref('success');
+    
+    // Permission management
+    const showPermissionModal = ref(false);
+    const selectedGroupForPermissions = ref(null);
+    const groupPermissions = ref([]);
+    const isSavingPermissions = ref(false);
 
     // New group form
     const newGroup = ref({
@@ -343,6 +446,50 @@ export default {
       description: '',
       chatTitle: ''
     });
+
+    // Available permissions
+    const availablePermissions = ref([
+      { name: 'view_all', description: 'Xem tất cả dữ liệu' },
+      { name: 'system_logs', description: 'Xem system logs' },
+      { name: 'application_logs', description: 'Xem application logs' },
+      { name: 'error_logs', description: 'Xem error logs' },
+      { name: 'transaction_logs', description: 'Xem transaction logs' },
+      { name: 'transaction_status', description: 'Xem trạng thái giao dịch' },
+      { name: 'create_ticket', description: 'Tạo ticket mới' },
+      { name: 'view_tickets', description: 'Xem danh sách tickets' },
+      { name: 'assign_ticket', description: 'Assign ticket cho agent' },
+      { name: 'manage_tickets', description: 'Quản lý tickets' },
+      { name: 'system_management', description: 'Quản lý hệ thống' },
+      { name: 'view_own', description: 'Chỉ xem dữ liệu của mình' }
+    ]);
+
+    // Permission templates
+    const permissionTemplates = ref([
+      {
+        role: 'admin',
+        name: '👑 Admin',
+        icon: '👑',
+        permissions: ['view_all', 'system_logs', 'application_logs', 'error_logs', 'transaction_logs', 'system_management']
+      },
+      {
+        role: 'supplier',
+        name: '🚚 Supplier',
+        icon: '🚚',
+        permissions: ['view_own', 'transaction_logs', 'transaction_status', 'create_ticket', 'view_tickets']
+      },
+      {
+        role: 'customer',
+        name: '👥 Customer',
+        icon: '👥',
+        permissions: ['view_own', 'transaction_status', 'create_ticket', 'view_tickets']
+      },
+      {
+        role: 'agent',
+        name: '👨‍💼 Agent',
+        icon: '👨‍💼',
+        permissions: ['view_own', 'view_tickets', 'assign_ticket', 'manage_tickets', 'create_ticket']
+      }
+    ]);
 
     // Computed properties
     const filteredGroups = computed(() => {
@@ -442,14 +589,30 @@ export default {
 
     const updateGroup = async () => {
       try {
+        console.log('🔄 Updating group:', editingGroup.value);
         isUpdating.value = true;
-        await api.put(`/telegram-groups/${editingGroup.value.id}`, editingGroup.value);
+        
+        // Chỉ gửi fields cần thiết, loại bỏ relations và computed fields
+        const updateData = {
+          groupName: editingGroup.value.groupName,
+          groupType: editingGroup.value.groupType,
+          chatId: editingGroup.value.chatId,
+          description: editingGroup.value.description,
+          chatTitle: editingGroup.value.chatTitle,
+          memberCount: editingGroup.value.memberCount,
+          isActive: editingGroup.value.isActive
+        };
+        
+        console.log('📤 Sending update data:', updateData);
+        const response = await api.put(`/telegram-groups/${editingGroup.value.id}`, updateData);
+        console.log('✅ Update response:', response);
         
         showEditModal.value = false;
         await loadGroups();
         showMessage('Cập nhật nhóm thành công!', 'success');
       } catch (error) {
-        console.error('Error updating group:', error);
+        console.error('❌ Error updating group:', error);
+        console.error('❌ Error response:', error.response);
         showMessage(error.response?.data?.error || 'Lỗi khi cập nhật nhóm', 'error');
       } finally {
         isUpdating.value = false;
@@ -458,6 +621,8 @@ export default {
 
     const toggleGroupStatus = async (group) => {
       try {
+        console.log('🔄 Toggling group status:', group.id, 'from', group.isActive, 'to', !group.isActive);
+        
         await api.put(`/telegram-groups/${group.id}`, {
           isActive: !group.isActive
         });
@@ -465,7 +630,7 @@ export default {
         await loadGroups();
         showMessage(`${group.isActive ? 'Ẩn' : 'Hiện'} nhóm thành công!`, 'success');
       } catch (error) {
-        console.error('Error toggling group status:', error);
+        console.error('❌ Error toggling group status:', error);
         showMessage('Lỗi khi thay đổi trạng thái nhóm', 'error');
       }
     };
@@ -482,6 +647,66 @@ export default {
       } catch (error) {
         console.error('Error deleting group:', error);
         showMessage('Lỗi khi xóa nhóm', 'error');
+      }
+    };
+
+    // Permission management methods
+    const managePermissions = async (group) => {
+      selectedGroupForPermissions.value = group;
+      groupPermissions.value = [];
+      showPermissionModal.value = true;
+      
+      // Load current permissions for this group
+      try {
+        const response = await api.get(`/permissions/role/${group.groupType.toLowerCase()}`);
+        if (response.data && response.data.success) {
+          groupPermissions.value = response.data.data.permissions || [];
+        }
+      } catch (error) {
+        console.error('Error loading group permissions:', error);
+        // Use default permissions based on group type
+        const template = permissionTemplates.value.find(t => t.role === group.groupType.toLowerCase());
+        if (template) {
+          groupPermissions.value = [...template.permissions];
+        }
+      }
+    };
+
+    const togglePermission = (permissionName) => {
+      const index = groupPermissions.value.indexOf(permissionName);
+      if (index > -1) {
+        groupPermissions.value.splice(index, 1);
+      } else {
+        groupPermissions.value.push(permissionName);
+      }
+    };
+
+    const applyPermissionTemplate = (role) => {
+      const template = permissionTemplates.value.find(t => t.role === role);
+      if (template) {
+        groupPermissions.value = [...template.permissions];
+        showMessage(`Đã áp dụng template ${template.name}`, 'success');
+      }
+    };
+
+    const saveGroupPermissions = async () => {
+      if (!selectedGroupForPermissions.value) return;
+
+      try {
+        isSavingPermissions.value = true;
+        
+        // Update group permissions via backend API
+        await api.put(`/telegram-groups/${selectedGroupForPermissions.value.id}`, {
+          permissions: groupPermissions.value
+        });
+        
+        showMessage('Lưu permissions thành công!', 'success');
+        showPermissionModal.value = false;
+      } catch (error) {
+        console.error('Error saving permissions:', error);
+        showMessage('Lỗi khi lưu permissions', 'error');
+      } finally {
+        isSavingPermissions.value = false;
       }
     };
 
@@ -533,7 +758,18 @@ export default {
       toggleGroupStatus,
       deleteGroup,
       getGroupTypeLabel,
-      getGroupTypeBadgeClass
+      getGroupTypeBadgeClass,
+      // Permission management
+      managePermissions,
+      togglePermission,
+      applyPermissionTemplate,
+      saveGroupPermissions,
+      showPermissionModal,
+      selectedGroupForPermissions,
+      groupPermissions,
+      isSavingPermissions,
+      availablePermissions,
+      permissionTemplates
     };
   }
 };

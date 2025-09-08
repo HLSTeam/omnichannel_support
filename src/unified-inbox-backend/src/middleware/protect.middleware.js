@@ -18,16 +18,19 @@ export const protect = async (req, res, next) => {
         select: { id: true, email: true, name: true, role: true }, // Don't include the password
       });
 
-      next(); // Move to the next step
+      if (!req.agent) {
+        return res.status(401).json({ error: 'Not authorized, agent not found' });
+      }
+
+      return next(); // Move to the next step
     } catch (error) {
-      console.error(error);
-      res.status(401).json({ error: 'Not authorized, token failed' });
+      console.error('Token verification error:', error);
+      return res.status(401).json({ error: 'Not authorized, token failed' });
     }
   }
 
-  if (!token) {
-    res.status(401).json({ error: 'Not authorized, no token' });
-  }
+  // No token provided
+  return res.status(401).json({ error: 'Not authorized, no token' });
 };
 
 export const adminOnly = (req, res, next) => {

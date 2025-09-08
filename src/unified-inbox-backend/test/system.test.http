@@ -65,3 +65,11 @@ x-api-key: abd60b81-f8e2-47bf-99c6-76ef0ff3b3a0
         "text": "Test message from n8n"
     }
 }
+
+####
+POST https://n8n.hls.vn/webhook-test/ai-intent-analysis
+Content-Type: application/json
+
+{
+    "name": "n3t3h"
+}

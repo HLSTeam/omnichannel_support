@@ -11,3 +11,23 @@ export const adminOnly = (req, res, next) => {
     res.status(403).json({ error: 'Forbidden: Yêu cầu quyền Admin.' });
   }
 };
+
+/**
+ * Generic authorization middleware that checks if user has required roles
+ * @param {string[]} allowedRoles - Array of allowed roles
+ */
+export const authorize = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.agent) {
+      return res.status(401).json({ error: 'Unauthorized: User not authenticated' });
+    }
+    
+    if (allowedRoles.includes(req.agent.role)) {
+      next();
+    } else {
+      res.status(403).json({ 
+        error: `Forbidden: Required roles: ${allowedRoles.join(', ')}. User role: ${req.agent.role}` 
+      });
+    }
+  };
+};

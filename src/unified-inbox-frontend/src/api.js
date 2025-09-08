@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: 'http://localhost:3000/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -23,4 +23,6 @@ apiClient.interceptors.request.use(
   }
 );
 
+// Export both default and named export for compatibility
 export default apiClient;
+export const api = apiClient;

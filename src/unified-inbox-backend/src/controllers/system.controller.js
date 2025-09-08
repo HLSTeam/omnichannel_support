@@ -23,11 +23,18 @@ const createSystem = async (req, res) => {
 const getAllSystems = async (req, res) => {
   try {
     const allSystems = await prisma.system.findMany({
-      include: { channels: true }, // Lấy luôn cả thông tin kênh liên quan
+      include: { Channel: true }, // Fix: dùng Channel thay vì channels
     });
-    res.status(200).json(allSystems);
+    res.status(200).json({
+      status: 'success',
+      data: allSystems
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Không thể lấy danh sách hệ thống.' });
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Không thể lấy danh sách hệ thống.',
+      error: error.message
+    });
   }
 };
 
@@ -61,7 +68,7 @@ const updateSystem = async (req, res) => {
     const updatedSystem = await prisma.system.update({
       where: { id: id },
       data: updateData,
-      include: { channels: true },
+      include: { Channel: true }, // Fix: dùng Channel thay vì channels
     });
     res.status(200).json(updatedSystem);
   } catch (error) {

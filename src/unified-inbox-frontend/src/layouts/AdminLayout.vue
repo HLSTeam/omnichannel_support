@@ -32,7 +32,7 @@
           <button
             v-for="tab in tabs"
             :key="tab.id"
-            @click="activeTab = tab.id"
+            @click="handleTabChange(tab.id)"
             :class="[
               'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
               activeTab === tab.id
@@ -166,6 +166,16 @@
           <TelegramGroupManager />
         </div>
 
+        <!-- Group Permission Templates Tab -->
+        <div v-if="activeTab === 'permission-templates'" class="space-y-6">
+          <PermissionTemplateManager />
+        </div>
+
+        <!-- User Declaration Management Tab -->
+        <div v-if="activeTab === 'user-declarations'" class="space-y-6">
+          <UserDeclarationManager />
+        </div>
+
         <!-- System Settings Tab -->
         <div v-if="activeTab === 'settings'" class="space-y-6">
           <div class="bg-white shadow rounded-lg p-6">
@@ -217,18 +227,22 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import TelegramGroupManager from '../components/TelegramGroupManager.vue';
+import UserDeclarationManager from '../components/UserDeclarationManager.vue';
+import PermissionTemplateManager from '../components/PermissionTemplateManager.vue';
 import api from '../api.js';
 
 export default {
   name: 'AdminLayout',
   components: {
-    TelegramGroupManager
+    TelegramGroupManager,
+    UserDeclarationManager,
+    PermissionTemplateManager
   },
   setup() {
     const router = useRouter();
     
     // Reactive data
-    const activeTab = ref('overview');
+    const activeTab = ref(localStorage.getItem('adminActiveTab') || 'overview');
     const stats = ref({});
     const userInfo = ref({});
     const showSystemInfoModal = ref(false);
@@ -238,8 +252,16 @@ export default {
     const tabs = [
       { id: 'overview', label: '📊 Tổng Quan' },
       { id: 'telegram-groups', label: '🚀 Quản Lý Nhóm Telegram' },
+      { id: 'user-declarations', label: '👥 User Declaration Management' },
+      { id: 'permission-templates', label: '🔧 Permission Management' },
       { id: 'settings', label: '⚙️ Cài Đặt' }
     ];
+
+    // Method to handle tab change
+    const handleTabChange = (tabId) => {
+      activeTab.value = tabId;
+      localStorage.setItem('adminActiveTab', tabId);
+    };
 
     // Methods
     const loadStats = async () => {
@@ -317,6 +339,7 @@ export default {
       systemInfo,
       
       // Methods
+      handleTabChange,
       loadStats,
       refreshStats,
       exportGroups,
