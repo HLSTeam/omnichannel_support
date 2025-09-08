@@ -5,6 +5,19 @@ const prisma = new PrismaClient();
 async function seedTelegramGroups() {
     console.log('🌱 Seeding Telegram Groups permissions...');
 
+    // Get or create a default system
+    let system = await prisma.system.findFirst();
+    if (!system) {
+        system = await prisma.system.create({
+            data: {
+                name: 'Default System'
+            }
+        });
+        console.log('✅ Created default system:', system.id);
+    } else {
+        console.log('✅ Using existing system:', system.id);
+    }
+
     // Seed Group Permissions
     const permissions = [
         // ADMIN permissions
@@ -30,7 +43,7 @@ async function seedTelegramGroups() {
         await prisma.group_permissions.upsert({
             where: {
                 systemId_groupType_permissionName: {
-                    systemId: "25ceca8e-c455-4b86-a54c-69dc9be79ad9", // Default system ID
+                    systemId: system.id,
                     groupType: permission.groupType,
                     permissionName: permission.permissionName
                 }
@@ -38,7 +51,7 @@ async function seedTelegramGroups() {
             update: {},
             create: {
                 ...permission,
-                systemId: "25ceca8e-c455-4b86-a54c-69dc9be79ad9" // Default system ID
+                systemId: system.id
             }
         });
     }

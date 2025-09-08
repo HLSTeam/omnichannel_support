@@ -5,6 +5,15 @@ const prisma = new PrismaClient();
 async function seedSampleTelegramGroups() {
     console.log('🌱 Seeding Sample Telegram Groups...');
 
+    // Get existing system
+    const system = await prisma.system.findFirst();
+    if (!system) {
+        console.error('❌ No system found. Please run seed-permission-templates.js first.');
+        return;
+    }
+    
+    console.log('✅ Using system:', system.id);
+
     const sampleGroups = [
         // ADMIN Groups
         {
@@ -87,7 +96,7 @@ async function seedSampleTelegramGroups() {
 
     for (const group of sampleGroups) {
         try {
-            await prisma.telegramGroup.upsert({
+            await prisma.telegram_groups.upsert({
                 where: { chatId: group.chatId },
                 update: {
                     groupName: group.groupName,
@@ -95,7 +104,10 @@ async function seedSampleTelegramGroups() {
                     chatTitle: group.chatTitle,
                     isActive: group.isActive
                 },
-                create: group
+                create: {
+                    ...group,
+                    systemId: system.id
+                }
             });
             console.log(`✅ Created/Updated: ${group.groupName} (${group.groupType})`);
         } catch (error) {

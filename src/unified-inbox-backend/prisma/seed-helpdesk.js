@@ -11,9 +11,10 @@ async function seedHelpdeskData() {
       where: { email: 'admin@helpdesk.com' },
       update: {},
       create: {
+        id: 'admin-agent-id-001',
         email: 'admin@helpdesk.com',
         name: 'Admin Agent',
-        password: 'hashed_password_here', // In real app, hash this
+        password: '$2a$10$//lYJU1UOJjSVIwknrfvI.D/u27EYk8uGrFGDeZYa77iQP07e58ly', // In real app, hash this
         role: 'ADMIN'
       }
     });
@@ -22,9 +23,10 @@ async function seedHelpdeskData() {
       where: { email: 'support@helpdesk.com' },
       update: {},
       create: {
+        id: 'support-agent-id-002',
         email: 'support@helpdesk.com',
         name: 'Support Agent',
-        password: 'hashed_password_here', // In real app, hash this
+        password: '$2a$10$//lYJU1UOJjSVIwknrfvI.D/u27EYk8uGrFGDeZYa77iQP07e58ly', // In real app, hash this
         role: 'AGENT'
       }
     });
@@ -33,9 +35,10 @@ async function seedHelpdeskData() {
       where: { email: 'customer@helpdesk.com' },
       update: {},
       create: {
+        id: 'customer-agent-id-003',
         email: 'customer@helpdesk.com',
         name: 'Customer Agent',
-        password: 'hashed_password_here', // In real app, hash this
+        password: '$2a$10$//lYJU1UOJjSVIwknrfvI.D/u27EYk8uGrFGDeZYa77iQP07e58ly', // In real app, hash this
         role: 'AGENT'
       }
     });
@@ -65,9 +68,11 @@ async function seedHelpdeskData() {
     if (!channel) {
       channel = await prisma.channel.create({
         data: {
+          id: 'helpdesk-channel-001',
           type: 'telegram',
           token: 'sample_token_here',
-          systemId: system.id
+          systemId: system.id,
+          updatedAt: new Date()
         }
       });
       console.log('✅ New channel created:', channel.id);
@@ -85,11 +90,13 @@ async function seedHelpdeskData() {
     if (!conversation1) {
       conversation1 = await prisma.conversation.create({
         data: {
+          id: 'conversation-001',
           platformChatId: 'telegram_group_1',
           name: 'General Support Group',
           type: 'group',
           systemId: system.id,
-          channelId: channel.id
+          channelId: channel.id,
+          updatedAt: new Date()
         }
       });
       console.log('✅ New conversation 1 created:', conversation1.id);
@@ -104,11 +111,13 @@ async function seedHelpdeskData() {
     if (!conversation2) {
       conversation2 = await prisma.conversation.create({
         data: {
+          id: 'conversation-002',
           platformChatId: 'telegram_group_2',
           name: 'Technical Issues Group',
           type: 'group',
           systemId: system.id,
-          channelId: channel.id
+          channelId: channel.id,
+          updatedAt: new Date()
         }
       });
       console.log('✅ New conversation 2 created:', conversation2.id);
@@ -121,8 +130,9 @@ async function seedHelpdeskData() {
     // Create sample helpdesk tickets
     const tickets = await Promise.all([
       // High priority technical ticket
-      prisma.helpdeskTicket.create({
+      prisma.helpdesk_tickets.create({
         data: {
+          id: 'ticket-001',
           title: 'System Login Issue',
           description: 'Users are unable to login to the system. Getting 500 error on login page.',
           priority: 'HIGH',
@@ -130,13 +140,16 @@ async function seedHelpdeskData() {
           status: 'OPEN',
           conversationId: conversation1.id,
           createdBy: adminAgent.id,
-          aiAssisted: false
+          aiAssisted: false,
+          systemId: system.id,
+          updatedAt: new Date()
         }
       }),
 
       // Medium priority billing ticket
-      prisma.helpdeskTicket.create({
+      prisma.helpdesk_tickets.create({
         data: {
+          id: 'ticket-002',
           title: 'Invoice Generation Problem',
           description: 'Monthly invoices are not being generated automatically. Need investigation.',
           priority: 'MEDIUM',
@@ -145,13 +158,16 @@ async function seedHelpdeskData() {
           conversationId: conversation1.id,
           createdBy: supportAgent.id,
           assignedTo: adminAgent.id,
-          aiAssisted: true
+          aiAssisted: true,
+          systemId: system.id,
+          updatedAt: new Date()
         }
       }),
 
       // Low priority general ticket
-      prisma.helpdeskTicket.create({
+      prisma.helpdesk_tickets.create({
         data: {
+          id: 'ticket-003',
           title: 'Documentation Update Request',
           description: 'Need to update user manual with new features added in v2.1',
           priority: 'LOW',
@@ -159,13 +175,16 @@ async function seedHelpdeskData() {
           status: 'OPEN',
           conversationId: conversation2.id,
           createdBy: customerAgent.id,
-          aiAssisted: false
+          aiAssisted: false,
+          systemId: system.id,
+          updatedAt: new Date()
         }
       }),
 
       // Urgent priority bug report
-      prisma.helpdeskTicket.create({
+      prisma.helpdesk_tickets.create({
         data: {
+          id: 'ticket-004',
           title: 'Critical Data Loss Bug',
           description: 'Users are experiencing data loss when switching between tabs. This is affecting production.',
           priority: 'URGENT',
@@ -173,13 +192,16 @@ async function seedHelpdeskData() {
           status: 'OPEN',
           conversationId: conversation2.id,
           createdBy: adminAgent.id,
-          aiAssisted: true
+          aiAssisted: true,
+          systemId: system.id,
+          updatedAt: new Date()
         }
       }),
 
       // Feature request ticket
-      prisma.helpdeskTicket.create({
+      prisma.helpdesk_tickets.create({
         data: {
+          id: 'ticket-005',
           title: 'Dark Mode Feature Request',
           description: 'Users are requesting dark mode theme for better visibility in low-light conditions.',
           priority: 'MEDIUM',
@@ -187,7 +209,9 @@ async function seedHelpdeskData() {
           status: 'REVIEW',
           conversationId: conversation1.id,
           createdBy: customerAgent.id,
-          aiAssisted: false
+          aiAssisted: false,
+          systemId: system.id,
+          updatedAt: new Date()
         }
       })
     ]);
@@ -196,24 +220,27 @@ async function seedHelpdeskData() {
 
     // Create sample ticket comments
     const comments = await Promise.all([
-      prisma.ticketComment.create({
+      prisma.ticket_comments.create({
         data: {
+          id: 'comment-001',
           content: 'Investigating the login issue. Found some database connection problems.',
           ticketId: tickets[0].id,
           userId: supportAgent.id
         }
       }),
 
-      prisma.ticketComment.create({
+      prisma.ticket_comments.create({
         data: {
+          id: 'comment-002',
           content: 'Database connection has been restored. Please test login again.',
           ticketId: tickets[0].id,
           userId: adminAgent.id
         }
       }),
 
-      prisma.ticketComment.create({
+      prisma.ticket_comments.create({
         data: {
+          id: 'comment-003',
           content: 'Invoice generation script has been updated and tested.',
           ticketId: tickets[1].id,
           userId: adminAgent.id
@@ -225,8 +252,9 @@ async function seedHelpdeskData() {
 
     // Create sample ticket history
     const history = await Promise.all([
-      prisma.ticketHistory.create({
+      prisma.ticket_history.create({
         data: {
+          id: 'history-001',
           ticketId: tickets[1].id,
           field: 'status',
           oldValue: 'OPEN',
@@ -235,8 +263,9 @@ async function seedHelpdeskData() {
         }
       }),
 
-      prisma.ticketHistory.create({
+      prisma.ticket_history.create({
         data: {
+          id: 'history-002',
           ticketId: tickets[1].id,
           field: 'assignedTo',
           oldValue: null,
@@ -250,16 +279,18 @@ async function seedHelpdeskData() {
 
     // Create sample ticket assignments
     const assignments = await Promise.all([
-      prisma.ticketAssignment.create({
+      prisma.ticket_assignments.create({
         data: {
+          id: 'assignment-001',
           ticketId: tickets[1].id,
           agentId: adminAgent.id,
           assignedBy: adminAgent.id
         }
       }),
 
-      prisma.ticketAssignment.create({
+      prisma.ticket_assignments.create({
         data: {
+          id: 'assignment-002',
           ticketId: tickets[0].id,
           agentId: supportAgent.id,
           assignedBy: adminAgent.id
