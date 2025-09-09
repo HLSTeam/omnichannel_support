@@ -19,6 +19,7 @@ async function createSystemAgent() {
       
       systemAgent = await prisma.agent.create({
         data: {
+          id: 'system-agent-id-001',
           name: 'System Agent (n8n)',
           email: 'system@n8n.integration',
           password: hashedPassword,

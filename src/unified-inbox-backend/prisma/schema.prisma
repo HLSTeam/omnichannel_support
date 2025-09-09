@@ -132,7 +132,7 @@ model UserDeclaration {
 }
 
 model helpdesk_tickets {
-  id                                       String               @id
+  id                                       String               @id @default(cuid())
   title                                    String
   description                              String
   priority                                 TicketPriority
@@ -143,7 +143,7 @@ model helpdesk_tickets {
   createdBy                                String
   aiAssisted                               Boolean              @default(false)
   createdAt                                DateTime             @default(now())
-  updatedAt                                DateTime
+  updatedAt                                DateTime             @updatedAt
   resolvedAt                               DateTime?
   deletedAt                                DateTime?
   systemId                                 String
@@ -157,7 +157,7 @@ model helpdesk_tickets {
 }
 
 model notification_logs {
-  id              String          @id
+  id              String          @id @default(cuid())
   telegramGroupId String
   messageContent  String
   messageType     String
@@ -190,7 +190,7 @@ model telegram_groups {
 }
 
 model ticket_assignments {
-  id                                         String           @id
+  id                                         String           @id @default(cuid())
   ticketId                                   String
   agentId                                    String
   assignedBy                                 String
@@ -202,7 +202,7 @@ model ticket_assignments {
 }
 
 model ticket_comments {
-  id               String           @id
+  id               String           @id @default(cuid())
   content          String
   ticketId         String
   userId           String
@@ -212,7 +212,7 @@ model ticket_comments {
 }
 
 model ticket_history {
-  id               String           @id
+  id               String           @id @default(cuid())
   ticketId         String
   field            String
   oldValue         String?

@@ -154,7 +154,7 @@ export const createTicket = async (req, res) => {
     // Create ticket with transaction
     const result = await prisma.$transaction(async (tx) => {
       // Create ticket
-      const ticket = await tx.helpdeskTicket.create({
+      const ticket = await tx.helpdesk_tickets.create({
         data: {
           title: title.trim(),
           description: description.trim(),
@@ -168,16 +168,16 @@ export const createTicket = async (req, res) => {
           systemId
         },
         include: {
-          creator: { select: { id: true, name: true, email: true, role: true } },
-          assignedAgent: { select: { id: true, name: true, email: true, role: true } },
-          conversation: { select: { id: true, name: true, type: true } },
-          system: { select: { id: true, name: true } }
+          Agent_helpdesk_tickets_createdByToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Agent_helpdesk_tickets_assignedToToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Conversation: { select: { id: true, name: true, type: true } },
+          System: { select: { id: true, name: true } }
         }
       });
       
       // Create assignment record if assigned
       if (assignedTo) {
-        await tx.ticketAssignment.create({
+        await tx.ticket_assignments.create({
           data: {
             ticketId: ticket.id,
             agentId: assignedTo,
@@ -186,7 +186,7 @@ export const createTicket = async (req, res) => {
         });
         
         // Create history record for assignment
-        await tx.ticketHistory.create({
+        await tx.ticket_history.create({
           data: {
             ticketId: ticket.id,
             field: 'assignedTo',
@@ -308,22 +308,22 @@ export const getTickets = async (req, res) => {
     
     // Get tickets and total count
     const [tickets, totalCount] = await Promise.all([
-      prisma.helpdeskTicket.findMany({
+      prisma.helpdesk_tickets.findMany({
         where,
         include: {
-          creator: { select: { id: true, name: true, email: true, role: true } },
-          assignedAgent: { select: { id: true, name: true, email: true, role: true } },
-          conversation: { select: { id: true, name: true, type: true } },
-          system: { select: { id: true, name: true } },
-          comments: {
+          Agent_helpdesk_tickets_createdByToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Agent_helpdesk_tickets_assignedToToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Conversation: { select: { id: true, name: true, type: true } },
+          System: { select: { id: true, name: true } },
+          ticket_comments: {
             include: {
-              user: { select: { id: true, name: true, email: true, role: true } }
+              Agent: { select: { id: true, name: true, email: true, role: true } }
             },
             orderBy: { createdAt: 'asc' }
           },
-          history: {
+          ticket_history: {
             include: {
-              user: { select: { id: true, name: true, email: true, role: true } }
+              Agent: { select: { id: true, name: true, email: true, role: true } }
             },
             orderBy: { createdAt: 'desc' }
           }
@@ -332,7 +332,7 @@ export const getTickets = async (req, res) => {
         skip,
         take: limitNum
       }),
-      prisma.helpdeskTicket.count({ where })
+      prisma.helpdesk_tickets.count({ where })
     ]);
     
     // Pagination metadata
@@ -358,36 +358,36 @@ export const getTicketById = async (req, res) => {
   try {
     const { id } = req.params;
     
-    const ticket = await prisma.helpdeskTicket.findFirst({
+    const ticket = await prisma.helpdesk_tickets.findFirst({
       where: {
         id,
         deletedAt: null
       },
       include: {
-        creator: { select: { id: true, name: true, email: true, role: true } },
-        assignedAgent: { select: { id: true, name: true, email: true, role: true } },
-        conversation: {
+        Agent_helpdesk_tickets_createdByToAgent: { select: { id: true, name: true, email: true, role: true } },
+        Agent_helpdesk_tickets_assignedToToAgent: { select: { id: true, name: true, email: true, role: true } },
+        Conversation: {
           include: {
-            system: { select: { id: true, name: true } },
-            channel: { select: { id: true, type: true } }
+            System: { select: { id: true, name: true } },
+            Channel: { select: { id: true, type: true } }
           }
         },
-        comments: {
+        ticket_comments: {
           include: {
-            user: { select: { id: true, name: true, email: true, role: true } }
+            Agent: { select: { id: true, name: true, email: true, role: true } }
           },
           orderBy: { createdAt: 'asc' }
         },
-        history: {
+        ticket_history: {
           include: {
-            user: { select: { id: true, name: true, email: true, role: true } }
+            Agent: { select: { id: true, name: true, email: true, role: true } }
           },
           orderBy: { createdAt: 'desc' }
         },
-        assignments: {
+        ticket_assignments: {
           include: {
-            agent: { select: { id: true, name: true, email: true, role: true } },
-            assigner: { select: { id: true, name: true, email: true, role: true } }
+            Agent_ticket_assignments_agentIdToAgent: { select: { id: true, name: true, email: true, role: true } },
+            Agent_ticket_assignments_assignedByToAgent: { select: { id: true, name: true, email: true, role: true } }
           },
           orderBy: { assignedAt: 'desc' }
         }
@@ -414,7 +414,7 @@ export const updateTicket = async (req, res) => {
     const updatedBy = req.agent.id;
     
     // Get current ticket
-    const currentTicket = await prisma.helpdeskTicket.findFirst({
+    const currentTicket = await prisma.helpdesk_tickets.findFirst({
       where: { id, deletedAt: null }
     });
     
@@ -461,20 +461,20 @@ export const updateTicket = async (req, res) => {
       }
       
       // Update ticket
-      const ticket = await tx.helpdeskTicket.update({
+      const ticket = await tx.helpdesk_tickets.update({
         where: { id },
         data: updateData,
         include: {
-          creator: { select: { id: true, name: true, email: true, role: true } },
-          assignedAgent: { select: { id: true, name: true, email: true, role: true } },
-          conversation: { select: { id: true, name: true, type: true } },
-          system: { select: { id: true, name: true } }
+          Agent_helpdesk_tickets_createdByToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Agent_helpdesk_tickets_assignedToToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Conversation: { select: { id: true, name: true, type: true } },
+          System: { select: { id: true, name: true } }
         }
       });
       
       // Create history records
       for (const [field, change] of Object.entries(changes)) {
-        await tx.ticketHistory.create({
+        await tx.ticket_history.create({
           data: {
             ticketId: id,
             field,
@@ -487,7 +487,7 @@ export const updateTicket = async (req, res) => {
       
       // Create assignment record if assignee changed
       if (changes.assignedTo) {
-        await tx.ticketAssignment.create({
+        await tx.ticket_assignments.create({
           data: {
             ticketId: id,
             agentId: updateData.assignedTo,
@@ -513,7 +513,7 @@ export const deleteTicket = async (req, res) => {
     const { id } = req.params;
     const deletedBy = req.agent.id;
     
-    const ticket = await prisma.helpdeskTicket.findFirst({
+    const ticket = await prisma.helpdesk_tickets.findFirst({
       where: { id, deletedAt: null }
     });
     
@@ -523,12 +523,12 @@ export const deleteTicket = async (req, res) => {
     
     // Soft delete with history
     await prisma.$transaction(async (tx) => {
-      await tx.helpdeskTicket.update({
+      await tx.helpdesk_tickets.update({
         where: { id },
         data: { deletedAt: new Date() }
       });
       
-      await tx.ticketHistory.create({
+      await tx.ticket_history.create({
         data: {
           ticketId: id,
           field: 'deleted',
@@ -567,7 +567,7 @@ export const assignTicket = async (req, res) => {
     }
     
     // Get current ticket
-    const ticket = await prisma.helpdeskTicket.findFirst({
+    const ticket = await prisma.helpdesk_tickets.findFirst({
       where: { id, deletedAt: null }
     });
     
@@ -577,16 +577,16 @@ export const assignTicket = async (req, res) => {
     
     // Update with transaction
     const result = await prisma.$transaction(async (tx) => {
-      const updatedTicket = await tx.helpdeskTicket.update({
+      const updatedTicket = await tx.helpdesk_tickets.update({
         where: { id },
         data: { assignedTo: agentId },
         include: {
-          creator: { select: { id: true, name: true, email: true, role: true } },
-          assignedAgent: { select: { id: true, name: true, email: true, role: true } }
+          Agent_helpdesk_tickets_createdByToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Agent_helpdesk_tickets_assignedToToAgent: { select: { id: true, name: true, email: true, role: true } }
         }
       });
       
-      await tx.ticketAssignment.create({
+      await tx.ticket_assignments.create({
         data: {
           ticketId: id,
           agentId,
@@ -594,7 +594,7 @@ export const assignTicket = async (req, res) => {
         }
       });
       
-      await tx.ticketHistory.create({
+      await tx.ticket_history.create({
         data: {
           ticketId: id,
           field: 'assignedTo',
@@ -631,7 +631,7 @@ export const changeTicketStatus = async (req, res) => {
       return sendResponse(res, 400, null, 'Invalid status');
     }
     
-    const ticket = await prisma.helpdeskTicket.findFirst({
+    const ticket = await prisma.helpdesk_tickets.findFirst({
       where: { id, deletedAt: null }
     });
     
@@ -655,16 +655,16 @@ export const changeTicketStatus = async (req, res) => {
         updateData.resolvedAt = new Date();
       }
       
-      const updatedTicket = await tx.helpdeskTicket.update({
+      const updatedTicket = await tx.helpdesk_tickets.update({
         where: { id },
         data: updateData,
         include: {
-          creator: { select: { id: true, name: true, email: true, role: true } },
-          assignedAgent: { select: { id: true, name: true, email: true, role: true } }
+          Agent_helpdesk_tickets_createdByToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Agent_helpdesk_tickets_assignedToToAgent: { select: { id: true, name: true, email: true, role: true } }
         }
       });
       
-      await tx.ticketHistory.create({
+      await tx.ticket_history.create({
         data: {
           ticketId: id,
           field: 'status',
@@ -701,7 +701,7 @@ export const changeTicketPriority = async (req, res) => {
       return sendResponse(res, 400, null, 'Invalid priority');
     }
     
-    const ticket = await prisma.helpdeskTicket.findFirst({
+    const ticket = await prisma.helpdesk_tickets.findFirst({
       where: { id, deletedAt: null }
     });
     
@@ -715,16 +715,16 @@ export const changeTicketPriority = async (req, res) => {
     
     // Update with transaction
     const result = await prisma.$transaction(async (tx) => {
-      const updatedTicket = await tx.helpdeskTicket.update({
+      const updatedTicket = await tx.helpdesk_tickets.update({
         where: { id },
         data: { priority },
         include: {
-          creator: { select: { id: true, name: true, email: true, role: true } },
-          assignedAgent: { select: { id: true, name: true, email: true, role: true } }
+          Agent_helpdesk_tickets_createdByToAgent: { select: { id: true, name: true, email: true, role: true } },
+          Agent_helpdesk_tickets_assignedToToAgent: { select: { id: true, name: true, email: true, role: true } }
         }
       });
       
-      await tx.ticketHistory.create({
+      await tx.ticket_history.create({
         data: {
           ticketId: id,
           field: 'priority',
@@ -756,7 +756,7 @@ export const addComment = async (req, res) => {
       return sendResponse(res, 400, null, 'Comment content is required');
     }
     
-    const ticket = await prisma.helpdeskTicket.findFirst({
+    const ticket = await prisma.helpdesk_tickets.findFirst({
       where: { id, deletedAt: null }
     });
     
@@ -764,15 +764,15 @@ export const addComment = async (req, res) => {
       return sendResponse(res, 404, null, 'Ticket not found');
     }
     
-    const comment = await prisma.ticketComment.create({
+    const comment = await prisma.ticket_comments.create({
       data: {
         content: content.trim(),
         ticketId: id,
         userId
       },
       include: {
-        user: { select: { id: true, name: true, email: true, role: true } },
-        ticket: { select: { id: true, title: true } }
+        Agent: { select: { id: true, name: true, email: true, role: true } },
+        helpdesk_tickets: { select: { id: true, title: true } }
       }
     });
     
@@ -789,7 +789,7 @@ export const getTicketHistory = async (req, res) => {
   try {
     const { id } = req.params;
     
-    const ticket = await prisma.helpdeskTicket.findFirst({
+    const ticket = await prisma.helpdesk_tickets.findFirst({
       where: { id, deletedAt: null },
       select: { id: true }
     });
@@ -798,10 +798,10 @@ export const getTicketHistory = async (req, res) => {
       return sendResponse(res, 404, null, 'Ticket not found');
     }
     
-    const history = await prisma.ticketHistory.findMany({
+    const history = await prisma.ticket_history.findMany({
       where: { ticketId: id },
       include: {
-        user: { select: { id: true, name: true, email: true, role: true } }
+        Agent: { select: { id: true, name: true, email: true, role: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
