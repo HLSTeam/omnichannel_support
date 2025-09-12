@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { checkUserPermissions } from '../services/permission.service.js';
+import elasticsearchService from '../services/elasticsearch.service.js';
 
 const prisma = new PrismaClient();
 
@@ -7,7 +8,7 @@ const prisma = new PrismaClient();
 // Check system logs for specific system
 const checkLogs = async (req, res) => {
     try {
-        const { systemId, chatId, logType, chatTitle, username, timeRange, logLevel } = req.body;
+        const { systemId, chatId, logType, chatTitle, userId, username, timeRange, logLevel } = req.body;
         
         // 🔒 VALIDATE REQUIRED FIELDS
         if (!systemId) {
@@ -39,10 +40,10 @@ const checkLogs = async (req, res) => {
         // 🔒 CHECK USER PERMISSIONS USING PERMISSION SERVICE
         const permissionResult = await checkUserPermissions(
             systemId, 
-            chatId, 
-            'check_logs', 
-            chatTitle, 
-            username
+            chatId,
+            userId,
+            username,
+            'system_logs', 
         );
         
         if (!permissionResult.success) {
@@ -53,7 +54,7 @@ const checkLogs = async (req, res) => {
             });
         }
         
-        const { hasPermission, userRole, permissions, groupInfo } = permissionResult.data;
+        const { hasPermission, userRole, permissions, groupInfo, autoDetected } = permissionResult.data;
         
         if (!hasPermission) {
             return res.status(403).json({
@@ -66,11 +67,23 @@ const checkLogs = async (req, res) => {
             });
         }
         
-        // 🚀 MOCK LOG DATA (Replace with actual system API calls)
-        const mockLogs = generateMockLogs(systemId, system.name, logType, logLevel, userRole);
+        // 🔍 ELASTICSEARCH LOG SEARCH (Replaces mock data)
+        const elasticsearchResult = await elasticsearchService.searchLogs({
+            systemId,
+            logType,
+            logLevel,
+            timeRange,
+            userPermissions: permissions,
+            size: 100
+        });
         
         // 📊 AUDIT LOG
         console.log(`[AUDIT] Check logs request: System=${system.name}, User=${username}, Role=${userRole}, ChatId=${chatId}`);
+        
+        // If Elasticsearch fails, use fallback mock data
+        const logs = elasticsearchResult.success ? elasticsearchResult.data.logs : generateMockLogs(systemId, system.name, logType, logLevel, userRole);
+        const totalLogs = elasticsearchResult.success ? elasticsearchResult.data.totalLogs : logs.length;
+        const dataSource = elasticsearchResult.success ? 'elasticsearch' : 'fallback';
         
         res.json({
             success: true,
@@ -83,9 +96,11 @@ const checkLogs = async (req, res) => {
                 userRole: userRole,
                 permissions: permissions,
                 groupInfo: groupInfo,
-                autoDetected: autoDetected,
-                logs: mockLogs,
-                totalLogs: mockLogs.length,
+                logs: logs,
+                totalLogs: totalLogs,
+                dataSource: dataSource,
+                elasticsearchHealth: await elasticsearchService.isHealthy(),
+                indexPattern: elasticsearchResult.data?.indexPattern,
                 timestamp: new Date().toISOString()
             }
         });
@@ -133,65 +148,53 @@ const checkTransactions = async (req, res) => {
             });
         }
         
-        // 🔒 VALIDATE USER PERMISSIONS (System-aware)
-        const telegramGroup = await prisma.telegram_groups.findFirst({
-            where: { 
-                chatId: chatId.toString(),
-                systemId: systemId  // 🆕 SYSTEM ISOLATION
-            },
-            include: { permissions: true }
-        });
+        // 🔒 CHECK USER PERMISSIONS USING PERMISSION SERVICE
+        const permissionResult = await checkUserPermissions(
+            systemId, 
+            chatId, 
+            'check_transactions', 
+            chatTitle, 
+            username
+        );
         
-        // Mock permissions check if group not registered
-        let userRole = 'customer'; // default
-        let permissions = [];
-        
-        if (telegramGroup) {
-            userRole = telegramGroup.groupType.toLowerCase();
-            const groupPermissions = await prisma.groupPermission.findMany({
-                where: { 
-                    systemId: systemId,
-                    groupType: telegramGroup.groupType 
-                }
+        if (!permissionResult.success) {
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to check permissions',
+                details: permissionResult.error
             });
-            permissions = groupPermissions.map(p => p.permissionName);
-        } else {
-            // Auto-detect role for unregistered groups
-            const title = (chatTitle || '').toLowerCase();
-            const user = (username || '').toLowerCase();
-            
-            if (title.includes('admin') || user.includes('admin')) {
-                userRole = 'admin';
-                permissions = ['view_all', 'transaction_status', 'transaction_details'];
-            } else if (title.includes('supplier') || user.includes('supplier')) {
-                userRole = 'supplier';
-                permissions = ['view_own', 'transaction_status'];
-            } else {
-                userRole = 'customer';
-                permissions = ['view_own', 'transaction_status'];
-            }
         }
         
-        // 🔒 CHECK TRANSACTION ACCESS PERMISSIONS
-        const hasTransAccess = permissions.includes('transaction_status') || 
-                              permissions.includes('view_all') ||
-                              userRole === 'admin';
+        const { hasPermission, userRole, permissions, groupInfo, autoDetected } = permissionResult.data;
         
-        if (!hasTransAccess) {
+        if (!hasPermission) {
             return res.status(403).json({
                 success: false,
                 error: 'Insufficient permissions to access transaction data',
                 userRole: userRole,
                 permissions: permissions,
-                systemId: systemId
+                systemId: systemId,
+                groupInfo: groupInfo
             });
         }
         
-        // 🚀 MOCK TRANSACTION DATA (Replace with actual system API calls)
-        const mockTransactions = generateMockTransactions(systemId, system.name, transactionId, status, userRole);
+        // 🔍 ELASTICSEARCH TRANSACTION SEARCH (Replaces mock data)
+        const elasticsearchResult = await elasticsearchService.searchTransactions({
+            systemId,
+            transactionId,
+            status,
+            timeRange,
+            userPermissions: permissions,
+            size: 100
+        });
         
         // 📊 AUDIT LOG
         console.log(`[AUDIT] Check trans request: System=${system.name}, User=${username}, Role=${userRole}, TransactionId=${transactionId}, ChatId=${chatId}`);
+        
+        // If Elasticsearch fails, use fallback mock data
+        const transactions = elasticsearchResult.success ? elasticsearchResult.data.transactions : generateMockTransactions(systemId, system.name, transactionId, status, userRole);
+        const totalTransactions = elasticsearchResult.success ? elasticsearchResult.data.totalTransactions : transactions.length;
+        const dataSource = elasticsearchResult.success ? 'elasticsearch' : 'fallback';
         
         res.json({
             success: true,
@@ -205,8 +208,12 @@ const checkTransactions = async (req, res) => {
                 },
                 userRole: userRole,
                 permissions: permissions,
-                transactions: mockTransactions,
-                totalTransactions: mockTransactions.length,
+                groupInfo: groupInfo,
+                transactions: transactions,
+                totalTransactions: totalTransactions,
+                dataSource: dataSource,
+                elasticsearchHealth: await elasticsearchService.isHealthy(),
+                indexPattern: elasticsearchResult.data?.indexPattern,
                 timestamp: new Date().toISOString()
             }
         });
