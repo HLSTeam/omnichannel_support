@@ -1,40 +1,37 @@
-import { Client } from '@elastic/elasticsearch';
+import axios from 'axios';
 
 /**
  * Elasticsearch Service for Logs Integration
- * Connects to Elasticsearch cluster and provides log querying capabilities
+ * Connects to Elasticsearch cluster and provides log querying capabilities using Axios
  */
 class ElasticsearchService {
     constructor() {
-        this.client = null;
         this.isConnected = false;
         this.elasticsearchUrl = process.env.ELASTICSEARCH_URL || 'http://192.168.0.10:29200';
+        this.searchUrl = `${this.elasticsearchUrl}/_search`;
+        this.healthUrl = `${this.elasticsearchUrl}/_cluster/health`;
+        this.indicesUrl = `${this.elasticsearchUrl}/_cat/indices`;
         
         // Initialize connection
         this.initializeConnection();
     }
 
     /**
-     * Initialize Elasticsearch connection
+     * Initialize Elasticsearch connection using Axios
      */
     async initializeConnection() {
         try {
-            this.client = new Client({
-                node: this.elasticsearchUrl,
-                requestTimeout: 30000,
-                pingTimeout: 3000,
-                // Basic auth if needed
-                // auth: {
-                //     username: process.env.ELASTICSEARCH_USERNAME || '',
-                //     password: process.env.ELASTICSEARCH_PASSWORD || ''
-                // }
+            // Test connection with cluster health endpoint
+            const response = await axios.get(this.healthUrl, {
+                timeout: 30000,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
             });
-
-            // Test connection
-            const health = await this.client.cluster.health();
+            
             console.log(`✅ Elasticsearch connected: ${this.elasticsearchUrl}`, {
-                status: health.status,
-                cluster_name: health.cluster_name
+                status: response.data.status,
+                cluster_name: response.data.cluster_name
             });
             this.isConnected = true;
         } catch (error) {
@@ -48,10 +45,13 @@ class ElasticsearchService {
      */
     async isHealthy() {
         try {
-            if (!this.client) return false;
-            
-            const health = await this.client.cluster.health();
-            return health.body.status !== 'red';
+            const response = await axios.get(this.healthUrl, {
+                timeout: 10000,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            return response.data.status !== 'red';
         } catch (error) {
             console.error('Elasticsearch health check failed:', error.message);
             return false;
@@ -64,15 +64,17 @@ class ElasticsearchService {
      * @param {string} criteria.systemId - System ID for isolation
      * @param {string} [criteria.logType] - Log type filter (system|application|error|access)
      * @param {string} [criteria.logLevel] - Log level filter (debug|info|warn|error)
-     * @param {string} [criteria.timeRange] - Time range (last_1_hour|last_24_hours|last_7_days)
+     * @param {string} [criteria.timeRange] - Time range (last_1_hour|last_24_hours|last_7_days) or ISO date string
      * @param {string} [criteria.searchQuery] - Free text search query
-     * @param {number} [criteria.size] - Maximum number of logs to return (default: 100)
+     * @param {number} [criteria.size] - Maximum number of logs to return (default: 50)
      * @param {Array} [criteria.userPermissions] - User permissions for filtering
+     * @param {boolean} [criteria.trackTotalHits] - Whether to track total hits accurately (default: true)
+     * @param {Object} [criteria.customFilter] - Custom Elasticsearch filter body to apply
      * @returns {Promise<Object>} Search results
      */
     async searchLogs(criteria) {
         try {
-            if (!this.isConnected || !this.client) {
+            if (!this.isConnected) {
                 throw new Error('Elasticsearch not connected');
             }
 
@@ -82,29 +84,41 @@ class ElasticsearchService {
                 logLevel,
                 timeRange = 'last_1_hour',
                 searchQuery,
-                size = 100,
-                userPermissions = []
+                size = 50,
+                userPermissions = [],
+                trackTotalHits = true,
+                customFilter
             } = criteria;
 
-            // Build Elasticsearch query
-            const query = this.buildLogQuery({
-                systemId,
-                logType,
-                logLevel,
-                timeRange,
-                searchQuery,
-                userPermissions
-            });
+            // Use custom filter if provided, otherwise build standard query
+            let searchBody;
+            let query;
+            if (customFilter) {
+                searchBody = this.applyCustomFilter(customFilter, {
+                    searchQuery,
+                    timeRange,
+                    systemId,
+                    userPermissions
+                });
+                query = searchBody.query;
+            } else {
+                // Build standard Elasticsearch query
+                query = this.buildLogQuery({
+                    systemId,
+                    logType,
+                    logLevel,
+                    timeRange,
+                    searchQuery,
+                    userPermissions
+                });
 
-            // Execute search
-            const searchParams = {
-                index: this.getLogIndexPattern(systemId),
-                body: {
+                searchBody = {
                     query: query,
                     sort: [
                         { '@timestamp': { order: 'desc' } }
                     ],
                     size: size,
+                    track_total_hits: trackTotalHits,
                     _source: {
                         includes: [
                             '@timestamp',
@@ -113,26 +127,38 @@ class ElasticsearchService {
                             'messageTemplate',
                             'fields',
                             'system_id',
-                            'log_type',
-                            'host',
-                            'environment'
+                            //'log_type',
+                            //'host',
+                            //'environment',
                         ]
                     }
-                }
+                };
+            }
+
+            console.log(`🔍 Elasticsearch query for system ${systemId}:`, JSON.stringify(searchBody, null, 2));
+
+            // Execute search using axios
+            const config = {
+                method: 'post',
+                maxBodyLength: Infinity,
+                url: this.searchUrl,
+                headers: { 
+                    'Content-Type': 'application/json'
+                },
+                data: JSON.stringify(searchBody),
+                timeout: 30000
             };
 
-            console.log(`🔍 Elasticsearch query for system ${systemId}:`, JSON.stringify(searchParams, null, 2));
-
-            const response = await this.client.search(searchParams);
+            const response = await axios.request(config);
             
             // Process and format results
-            const logs = this.formatLogResults(response.body.hits.hits, systemId);
+            const logs = this.formatLogResults(response.data.hits.hits, systemId);
             
             return {
                 success: true,
                 data: {
                     logs: logs,
-                    totalLogs: response.body.hits.total.value || response.body.hits.total,
+                    totalLogs: response.data.hits.total.value || response.data.hits.total,
                     query: query,
                     indexPattern: this.getLogIndexPattern(systemId)
                 }
@@ -141,8 +167,17 @@ class ElasticsearchService {
         } catch (error) {
             console.error('Elasticsearch log search failed:', error.message);
             
-            // Return fallback mock data if Elasticsearch fails
-            return this.getFallbackLogs(criteria);
+            // Return empty results if Elasticsearch fails
+            return {
+                success: false,
+                error: error.message,
+                data: {
+                    logs: [],
+                    totalLogs: 0,
+                    query: null,
+                    indexPattern: this.getLogIndexPattern(criteria.systemId)
+                }
+            };
         }
     }
 
@@ -154,25 +189,25 @@ class ElasticsearchService {
         const filterClauses = [];
 
         // System isolation - CRITICAL for multi-system architecture
-        if (systemId) {
-            filterClauses.push({
-                term: { 'system_id.keyword': systemId }
-            });
-        }
+        // if (systemId) {
+        //     filterClauses.push({
+        //         term: { 'system_id.keyword': systemId }
+        //     });
+        // }
 
         // Log type filter
-        if (logType) {
-            filterClauses.push({
-                term: { 'log_type.keyword': logType }
-            });
-        }
+        // if (logType) {
+        //     filterClauses.push({
+        //         term: { 'log_type.keyword': logType }
+        //     });
+        // }
 
         // Log level filter - Updated to match the actual field structure
-        if (logLevel) {
-            filterClauses.push({
-                term: { 'level.keyword': logLevel }
-            });
-        }
+        // if (logLevel) {
+        //     filterClauses.push({
+        //         term: { 'level.keyword': logLevel }
+        //     });
+        // }
 
         // Time range filter
         const timeFilter = this.getTimeRangeFilter(timeRange);
@@ -211,6 +246,114 @@ class ElasticsearchService {
                 filter: filterClauses
             }
         };
+    }
+
+    /**
+     * Apply custom filter with template variable replacement
+     * @param {Object} customFilter - Custom Elasticsearch filter body
+     * @param {Object} variables - Variables to replace in the filter
+     * @returns {Object} Processed filter body
+     */
+    applyCustomFilter(customFilter, variables) {
+        const { searchQuery, timeRange, systemId, userPermissions = [] } = variables;
+        
+        // Deep clone the custom filter to avoid mutation
+        let filterBody = JSON.parse(JSON.stringify(customFilter));
+        
+        // Convert filter body to string for template replacement
+        let filterString = JSON.stringify(filterBody);
+        
+        // Replace template variables
+        if (searchQuery) {
+            filterString = filterString.replace(/\{searchQuery\}/g, searchQuery);
+        } else {
+            // If no search query, remove the match clause or replace with match_all
+            filterString = filterString.replace(/\{\s*"match"\s*:\s*\{\s*"message"\s*:\s*"\{searchQuery\}"\s*\}\s*\}/g, '{"match_all": {}}');
+        }
+        
+        // Handle time range replacement
+        if (timeRange) {
+            let timeValue;
+            if (timeRange.includes('last_')) {
+                // Convert preset time ranges to ISO dates
+                timeValue = this.getTimeRangeValue(timeRange);
+            } else {
+                // Assume it's already an ISO date string
+                timeValue = timeRange;
+            }
+            filterString = filterString.replace(/\{timeRange\}/g, timeValue);
+        }
+        
+        // Parse back to object
+        filterBody = JSON.parse(filterString);
+        
+        // Apply system isolation and permission-based filtering
+        if (systemId || userPermissions.length > 0) {
+            filterBody = this.addSystemAndPermissionFilters(filterBody, systemId, userPermissions);
+        }
+        
+        return filterBody;
+    }
+
+    /**
+     * Get time range value as ISO string
+     */
+    getTimeRangeValue(timeRange) {
+        const now = new Date();
+        let gte;
+
+        switch (timeRange) {
+            case 'last_1_hour':
+                gte = new Date(now.getTime() - 60 * 60 * 1000);
+                break;
+            case 'last_24_hours':
+                gte = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                break;
+            case 'last_7_days':
+                gte = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            default:
+                gte = new Date(now.getTime() - 60 * 60 * 1000); // default 1 hour
+        }
+
+        return gte.toISOString();
+    }
+
+    /**
+     * Add system isolation and permission-based filters to the query
+     */
+    addSystemAndPermissionFilters(filterBody, systemId, userPermissions) {
+        // Ensure the query has the proper bool structure
+        if (!filterBody.query) {
+            filterBody.query = { bool: { must: [], filter: [] } };
+        } else if (!filterBody.query.bool) {
+            filterBody.query = { bool: { must: [filterBody.query], filter: [] } };
+        }
+        
+        if (!filterBody.query.bool.filter) {
+            filterBody.query.bool.filter = [];
+        }
+        
+        // Add system isolation
+        // if (systemId) {
+        //     filterBody.query.bool.filter.push({
+        //         term: { 'system_id.keyword': systemId }
+        //     });
+        // }
+        
+        // Add permission-based filtering
+        if (!userPermissions.includes('view_all') && !userPermissions.includes('system_logs')) {
+            filterBody.query.bool.filter.push({
+                bool: {
+                    must_not: [
+                        // { term: { 'level.keyword': 'DEBUG' } },
+                        // { term: { 'log_type.keyword': 'system' } }
+                    ]
+                }
+            });
+        }
+        
+        return filterBody;
     }
 
     /**
@@ -281,59 +424,31 @@ class ElasticsearchService {
         });
     }
 
-    /**
-     * Get fallback mock logs if Elasticsearch is unavailable
-     */
-    getFallbackLogs(criteria) {
-        console.warn('⚠️ Using fallback mock logs - Elasticsearch unavailable');
-        
-        const { systemId, logType = 'system', logLevel = 'info' } = criteria;
-        const mockLogs = [];
-        
-        // Generate basic mock logs
-        for (let i = 0; i < 10; i++) {
-            mockLogs.push({
-                id: `fallback_log_${systemId}_${i}`,
-                timestamp: new Date(Date.now() - Math.random() * 60 * 60 * 1000).toISOString(),
-                level: logLevel,
-                type: logType,
-                message: `[FALLBACK] System ${systemId} - Mock log entry ${i + 1}`,
-                source: 'fallback-service',
-                systemId: systemId,
-                host: 'localhost',
-                environment: 'development'
-            });
-        }
-
-        return {
-            success: true,
-            data: {
-                logs: mockLogs,
-                totalLogs: mockLogs.length,
-                fallback: true,
-                query: 'fallback_mode'
-            }
-        };
-    }
 
     /**
      * Get available log indices for a system
      */
     async getSystemIndices(systemId) {
         try {
-            if (!this.isConnected || !this.client) {
+            if (!this.isConnected) {
                 throw new Error('Elasticsearch not connected');
             }
 
             const pattern = this.getLogIndexPattern(systemId);
-            const response = await this.client.cat.indices({
-                index: pattern,
-                format: 'json'
-            });
+            const config = {
+                method: 'get',
+                url: `${this.indicesUrl}/${pattern}?format=json`,
+                headers: { 
+                    'Content-Type': 'application/json'
+                },
+                timeout: 10000
+            };
+
+            const response = await axios.request(config);
 
             return {
                 success: true,
-                indices: response.body || []
+                indices: response.data || []
             };
         } catch (error) {
             console.error('Failed to get system indices:', error.message);
@@ -378,7 +493,7 @@ class ElasticsearchService {
      */
     async searchTransactions(criteria) {
         try {
-            if (!this.isConnected || !this.client) {
+            if (!this.isConnected) {
                 throw new Error('Elasticsearch not connected');
             }
 
@@ -404,54 +519,64 @@ class ElasticsearchService {
                 userPermissions
             });
 
-            // Execute search
-            const searchParams = {
-                index: this.getTransactionIndexPattern(systemId),
-                body: {
-                    query: query,
-                    sort: [
-                        { '@timestamp': { order: 'desc' } },
-                        { 'timestamp': { order: 'desc' } },
-                        { 'created_at': { order: 'desc' } }
-                    ],
-                    size: size,
-                    _source: [
-                        '@timestamp',
-                        'timestamp',
-                        'created_at',
-                        'transaction_id',
-                        'status',
-                        'type',
-                        'transaction_type',
-                        'amount',
-                        'currency',
-                        'details',
-                        'description',
-                        'system_id',
-                        'provider',
-                        'user_id',
-                        'customer_id',
-                        'reference',
-                        'payment_method',
-                        'fee',
-                        'error_code',
-                        'error_message'
-                    ]
-                }
+            // Build search body
+            const searchBody = {
+                query: query,
+                sort: [
+                    { '@timestamp': { order: 'desc' } },
+                    { 'timestamp': { order: 'desc' } },
+                    { 'created_at': { order: 'desc' } }
+                ],
+                size: size,
+                track_total_hits: true,
+                _source: [
+                    '@timestamp',
+                    'timestamp',
+                    'created_at',
+                    'transaction_id',
+                    'status',
+                    'type',
+                    'transaction_type',
+                    'amount',
+                    'currency',
+                    'details',
+                    'description',
+                    'system_id',
+                    'provider',
+                    'user_id',
+                    'customer_id',
+                    'reference',
+                    'payment_method',
+                    'fee',
+                    'error_code',
+                    'error_message'
+                ]
             };
 
-            console.log(`🔍 Elasticsearch transaction query for system ${systemId}:`, JSON.stringify(searchParams, null, 2));
+            console.log(`🔍 Elasticsearch transaction query for system ${systemId}:`, JSON.stringify(searchBody, null, 2));
 
-            const response = await this.client.search(searchParams);
+            // Execute search using axios
+            const config = {
+                method: 'post',
+                maxBodyLength: Infinity,
+                url: this.searchUrl,
+                headers: { 
+                    'Content-Type': 'application/json'
+                },
+                data: JSON.stringify(searchBody),
+                timeout: 30000
+            };
+
+            const response = await axios.request(config);
             
             // Process and format results
-            const transactions = this.formatTransactionResults(response.body.hits.hits, systemId);
+            const transactions = this.formatTransactionResults(response.data.hits.hits, systemId);
             
             return {
                 success: true,
                 data: {
                     transactions: transactions,
-                    totalTransactions: response.body.hits.total.value || response.body.hits.total,
+                    totalTransactions: response.data.hits.total.value || response.data.hits.total,
                     query: query,
                     indexPattern: this.getTransactionIndexPattern(systemId)
                 }
@@ -460,8 +585,17 @@ class ElasticsearchService {
         } catch (error) {
             console.error('Elasticsearch transaction search failed:', error.message);
             
-            // Return fallback mock data if Elasticsearch fails
-            return this.getFallbackTransactions(criteria);
+            // Return empty results if Elasticsearch fails
+            return {
+                success: false,
+                error: error.message,
+                data: {
+                    transactions: [],
+                    totalTransactions: 0,
+                    query: null,
+                    indexPattern: this.getTransactionIndexPattern(criteria.systemId)
+                }
+            };
         }
     }
 
@@ -583,57 +717,6 @@ class ElasticsearchService {
         });
     }
 
-    /**
-     * Get fallback mock transactions if Elasticsearch is unavailable
-     */
-    getFallbackTransactions(criteria) {
-        console.warn('⚠️ Using fallback mock transactions - Elasticsearch unavailable');
-        
-        const { systemId, transactionId, status = 'completed' } = criteria;
-        const mockTransactions = [];
-        const statuses = ['completed', 'pending', 'failed', 'cancelled'];
-        const types = ['topup', 'card_purchase', 'airtime', 'data_package'];
-        
-        if (transactionId) {
-            // Return specific transaction
-            mockTransactions.push({
-                id: transactionId,
-                timestamp: new Date().toISOString(),
-                status: status,
-                type: types[Math.floor(Math.random() * types.length)],
-                amount: Math.floor(Math.random() * 1000000) + 10000,
-                currency: 'VND',
-                details: `[FALLBACK] Transaction ${transactionId} for system ${systemId}`,
-                systemId: systemId,
-                provider: 'fallback-provider'
-            });
-        } else {
-            // Generate basic mock transactions
-            for (let i = 0; i < 10; i++) {
-                mockTransactions.push({
-                    id: `fallback_trans_${systemId}_${i}`,
-                    timestamp: new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000).toISOString(),
-                    status: status || statuses[Math.floor(Math.random() * statuses.length)],
-                    type: types[Math.floor(Math.random() * types.length)],
-                    amount: Math.floor(Math.random() * 1000000) + 10000,
-                    currency: 'VND',
-                    details: `[FALLBACK] Mock transaction ${i + 1} for system ${systemId}`,
-                    systemId: systemId,
-                    provider: 'fallback-provider'
-                });
-            }
-        }
-
-        return {
-            success: true,
-            data: {
-                transactions: mockTransactions,
-                totalTransactions: mockTransactions.length,
-                fallback: true,
-                query: 'fallback_mode'
-            }
-        };
-    }
 
     /**
      * Check if system has any transaction data
@@ -651,6 +734,56 @@ class ElasticsearchService {
             console.error('Failed to check transaction data:', error.message);
             return false;
         }
+    }
+
+    /**
+     * Search logs using the provided custom filter template
+     * This is a convenience method that applies the specific filter structure you provided
+     * @param {Object} criteria - Search criteria
+     * @param {string} criteria.systemId - System ID for isolation
+     * @param {string} [criteria.searchQuery] - Free text search query to replace {searchQuery}
+     * @param {string} [criteria.timeRange] - Time range to replace {timeRange}
+     * @param {Array} [criteria.userPermissions] - User permissions for filtering
+     * @returns {Promise<Object>} Search results
+     */
+    async searchLogsWithCustomFilter(criteria) {
+        // The custom filter template you provided
+        const customFilterTemplate = {
+            "size": 50,
+            "track_total_hits": true,
+            "sort": [
+                {
+                    "@timestamp": {
+                        "order": "desc"
+                    }
+                }
+            ],
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "match": {
+                                "message": "{searchQuery}"
+                            }
+                        }
+                    ],
+                    "filter": [
+                        {
+                            "range": {
+                                "@timestamp": {
+                                    "gte": "{timeRange}"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+
+        return this.searchLogs({
+            ...criteria,
+            customFilter: customFilterTemplate
+        });
     }
 }
 

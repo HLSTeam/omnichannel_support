@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 // Check system logs for specific system
 const checkLogs = async (req, res) => {
     try {
-        const { systemId, chatId, logType, chatTitle, userId, username, timeRange, logLevel } = req.body;
+        const { systemId, chatId, logType, chatTitle, userId, username, timeRange, logLevel, searchQuery } = req.body;
         
         // 🔒 VALIDATE REQUIRED FIELDS
         if (!systemId) {
@@ -67,12 +67,13 @@ const checkLogs = async (req, res) => {
             });
         }
         
-        // 🔍 ELASTICSEARCH LOG SEARCH (Replaces mock data)
+        // 🔍 ELASTICSEARCH LOG SEARCH
         const elasticsearchResult = await elasticsearchService.searchLogs({
             systemId,
             logType,
             logLevel,
             timeRange,
+            searchQuery,
             userPermissions: permissions,
             size: 100
         });
@@ -80,10 +81,10 @@ const checkLogs = async (req, res) => {
         // 📊 AUDIT LOG
         console.log(`[AUDIT] Check logs request: System=${system.name}, User=${username}, Role=${userRole}, ChatId=${chatId}`);
         
-        // If Elasticsearch fails, use fallback mock data
-        const logs = elasticsearchResult.success ? elasticsearchResult.data.logs : generateMockLogs(systemId, system.name, logType, logLevel, userRole);
-        const totalLogs = elasticsearchResult.success ? elasticsearchResult.data.totalLogs : logs.length;
-        const dataSource = elasticsearchResult.success ? 'elasticsearch' : 'fallback';
+        // Return logs from Elasticsearch or empty array if no data
+        const logs = elasticsearchResult.success ? elasticsearchResult.data.logs : [];
+        const totalLogs = elasticsearchResult.success ? elasticsearchResult.data.totalLogs : 0;
+        const dataSource = elasticsearchResult.success ? 'elasticsearch' : 'no_data';
         
         res.json({
             success: true,
@@ -191,10 +192,10 @@ const checkTransactions = async (req, res) => {
         // 📊 AUDIT LOG
         console.log(`[AUDIT] Check trans request: System=${system.name}, User=${username}, Role=${userRole}, TransactionId=${transactionId}, ChatId=${chatId}`);
         
-        // If Elasticsearch fails, use fallback mock data
-        const transactions = elasticsearchResult.success ? elasticsearchResult.data.transactions : generateMockTransactions(systemId, system.name, transactionId, status, userRole);
-        const totalTransactions = elasticsearchResult.success ? elasticsearchResult.data.totalTransactions : transactions.length;
-        const dataSource = elasticsearchResult.success ? 'elasticsearch' : 'fallback';
+        // Return transactions from Elasticsearch or empty array if no data
+        const transactions = elasticsearchResult.success ? elasticsearchResult.data.transactions : [];
+        const totalTransactions = elasticsearchResult.success ? elasticsearchResult.data.totalTransactions : 0;
+        const dataSource = elasticsearchResult.success ? 'elasticsearch' : 'no_data';
         
         res.json({
             success: true,
@@ -228,93 +229,6 @@ const checkTransactions = async (req, res) => {
     }
 };
 
-// 🧪 MOCK DATA GENERATORS
-
-function generateMockLogs(systemId, systemName, logType = 'system', logLevel = 'info', userRole) {
-    const logs = [];
-    const logTypes = ['system', 'application', 'error', 'access'];
-    const logLevels = ['debug', 'info', 'warn', 'error'];
-    
-    // Generate 10-20 mock logs
-    const logCount = Math.floor(Math.random() * 10) + 10;
-    
-    for (let i = 0; i < logCount; i++) {
-        const timestamp = new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000); // Last 24 hours
-        
-        logs.push({
-            id: `log_${systemId}_${i}`,
-            timestamp: timestamp.toISOString(),
-            level: logLevel || logLevels[Math.floor(Math.random() * logLevels.length)],
-            type: logType || logTypes[Math.floor(Math.random() * logTypes.length)],
-            message: generateLogMessage(systemName, i),
-            source: `${systemName}-service`,
-            systemId: systemId,
-            visible: userRole === 'admin' || Math.random() > 0.3 // Admin sees all, others see 70%
-        });
-    }
-    
-    return logs.filter(log => log.visible).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-}
-
-function generateMockTransactions(systemId, systemName, transactionId, status, userRole) {
-    const transactions = [];
-    const statuses = ['completed', 'pending', 'failed', 'cancelled'];
-    const types = ['topup', 'card_purchase', 'airtime', 'data_package'];
-    
-    if (transactionId) {
-        // Return specific transaction
-        transactions.push({
-            id: transactionId,
-            timestamp: new Date().toISOString(),
-            status: status || 'completed',
-            type: types[Math.floor(Math.random() * types.length)],
-            amount: Math.floor(Math.random() * 1000000) + 10000,
-            currency: 'VND',
-            details: `Transaction ${transactionId} for ${systemName}`,
-            systemId: systemId,
-            provider: systemName
-        });
-    } else {
-        // Return list of transactions
-        const transCount = Math.floor(Math.random() * 15) + 5;
-        
-        for (let i = 0; i < transCount; i++) {
-            const timestamp = new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000);
-            
-            transactions.push({
-                id: `trans_${systemId}_${i}`,
-                timestamp: timestamp.toISOString(),
-                status: status || statuses[Math.floor(Math.random() * statuses.length)],
-                type: types[Math.floor(Math.random() * types.length)],
-                amount: Math.floor(Math.random() * 1000000) + 10000,
-                currency: 'VND',
-                details: `${types[Math.floor(Math.random() * types.length)]} transaction`,
-                systemId: systemId,
-                provider: systemName,
-                visible: userRole === 'admin' || Math.random() > 0.2 // Admin sees all, others see 80%
-            });
-        }
-    }
-    
-    return transactions.filter(trans => trans.visible).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-}
-
-function generateLogMessage(systemName, index) {
-    const messages = [
-        `[${systemName}] Service started successfully`,
-        `[${systemName}] Processing topup request`,
-        `[${systemName}] Database connection established`,
-        `[${systemName}] User authentication successful`,
-        `[${systemName}] Transaction processed: amount=50000 VND`,
-        `[${systemName}] Cache updated for user data`,
-        `[${systemName}] API response time: 120ms`,
-        `[${systemName}] Webhook notification sent`,
-        `[${systemName}] System health check passed`,
-        `[${systemName}] Memory usage: 45%`
-    ];
-    
-    return messages[index % messages.length];
-}
 
 export {
     checkLogs,
