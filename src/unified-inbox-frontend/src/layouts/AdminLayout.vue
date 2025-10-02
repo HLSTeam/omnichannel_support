@@ -161,6 +161,11 @@
           </div>
         </div>
 
+        <!-- System Management Tab -->
+        <div v-if="activeTab === 'systems'" class="space-y-6">
+          <SystemManager />
+        </div>
+
         <!-- Telegram Groups Management Tab -->
         <div v-if="activeTab === 'telegram-groups'" class="space-y-6">
           <TelegramGroupManager />
@@ -229,6 +234,7 @@ import { useRouter } from 'vue-router';
 import TelegramGroupManager from '../components/TelegramGroupManager.vue';
 import UserDeclarationManager from '../components/UserDeclarationManager.vue';
 import PermissionTemplateManager from '../components/PermissionTemplateManager.vue';
+import SystemManager from '../components/SystemManager.vue';
 import api from '../api.js';
 
 export default {
@@ -236,7 +242,8 @@ export default {
   components: {
     TelegramGroupManager,
     UserDeclarationManager,
-    PermissionTemplateManager
+    PermissionTemplateManager,
+    SystemManager
   },
   setup() {
     const router = useRouter();
@@ -251,6 +258,7 @@ export default {
     // Navigation tabs
     const tabs = [
       { id: 'overview', label: '📊 Tổng Quan' },
+      { id: 'systems', label: '🖥️ Quản Lý Hệ Thống' },
       { id: 'telegram-groups', label: '🚀 Quản Lý Nhóm Telegram' },
       { id: 'user-declarations', label: '👥 User Declaration Management' },
       { id: 'permission-templates', label: '🔧 Permission Management' },

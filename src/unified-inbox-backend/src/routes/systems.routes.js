@@ -1,5 +1,5 @@
 import express from 'express';
-import { checkLogs, checkTransactions } from '../controllers/systems.controller.js';
+import { checkLogs, checkTransactions, executeCustomQuery } from '../controllers/systems.controller.js';
 
 const router = express.Router();
 
@@ -34,5 +34,20 @@ router.post('/check-logs', checkLogs);
  * }
  */
 router.post('/check-trans', checkTransactions);
+
+/**
+ * @route POST /api/v1/systems/custom-query
+ * @desc Execute custom Elasticsearch query for transactions (System-aware)
+ * @access Private (requires systemId for isolation)
+ * @body {
+ *   systemId: string (required),
+ *   chatId: string (required),
+ *   queryData: object (required) - Full Elasticsearch query object,
+ *   chatTitle?: string,
+ *   username?: string,
+ *   userId?: string
+ * }
+ */
+router.post('/custom-query', executeCustomQuery);
 
 export default router;

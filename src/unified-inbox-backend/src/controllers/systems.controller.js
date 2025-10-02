@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 // Check system logs for specific system
 const checkLogs = async (req, res) => {
     try {
-        const { systemId, chatId, logType, chatTitle, userId, username, timeRange, logLevel, searchQuery } = req.body;
+        const { systemId, chatId, logType, chatTitle, userId, username, timeRange, logLevel, searchQuery, requestText } = req.body;
         
         // 🔒 VALIDATE REQUIRED FIELDS
         if (!systemId) {
@@ -68,7 +68,7 @@ const checkLogs = async (req, res) => {
         }
         
         // 🔍 ELASTICSEARCH LOG SEARCH
-        const elasticsearchResult = await elasticsearchService.searchLogs({
+        const elasticsearchResult = await elasticsearchService.searchTransactions({
             systemId,
             logType,
             logLevel,
@@ -77,13 +77,15 @@ const checkLogs = async (req, res) => {
             userPermissions: permissions,
             size: 100
         });
+
+        console.log('elasticsearchResult', elasticsearchResult);
         
         // 📊 AUDIT LOG
         console.log(`[AUDIT] Check logs request: System=${system.name}, User=${username}, Role=${userRole}, ChatId=${chatId}`);
         
         // Return logs from Elasticsearch or empty array if no data
-        const logs = elasticsearchResult.success ? elasticsearchResult.data.logs : [];
-        const totalLogs = elasticsearchResult.success ? elasticsearchResult.data.totalLogs : 0;
+        const logs = elasticsearchResult.success ? elasticsearchResult.data.transactions : [];
+        const totalLogs = elasticsearchResult.success ? elasticsearchResult.data.totalTransactions : 0;
         const dataSource = elasticsearchResult.success ? 'elasticsearch' : 'no_data';
         
         res.json({
@@ -97,10 +99,12 @@ const checkLogs = async (req, res) => {
                 userRole: userRole,
                 permissions: permissions,
                 groupInfo: groupInfo,
+                requestText: requestText,
                 logs: logs,
                 totalLogs: totalLogs,
                 dataSource: dataSource,
-                elasticsearchHealth: await elasticsearchService.isHealthy(),
+                elasticsearchHealth: await elasticsearchService.isHealthy(systemId),
+                elasticsearchUrl: elasticsearchResult.data?.elasticsearchUrl,
                 indexPattern: elasticsearchResult.data?.indexPattern,
                 timestamp: new Date().toISOString()
             }
@@ -213,7 +217,8 @@ const checkTransactions = async (req, res) => {
                 transactions: transactions,
                 totalTransactions: totalTransactions,
                 dataSource: dataSource,
-                elasticsearchHealth: await elasticsearchService.isHealthy(),
+                elasticsearchHealth: await elasticsearchService.isHealthy(systemId),
+                elasticsearchUrl: elasticsearchResult.data?.elasticsearchUrl,
                 indexPattern: elasticsearchResult.data?.indexPattern,
                 timestamp: new Date().toISOString()
             }
@@ -230,7 +235,124 @@ const checkTransactions = async (req, res) => {
 };
 
 
+// POST /api/v1/systems/custom-query
+// Execute custom Elasticsearch query for transactions
+const executeCustomQuery = async (req, res) => {
+    try {
+        const { systemId, chatId, queryData, chatTitle, username, userId } = req.body;
+        
+        // 🔒 VALIDATE REQUIRED FIELDS
+        if (!systemId) {
+            return res.status(400).json({
+                success: false,
+                error: 'systemId is required for multi-system isolation'
+            });
+        }
+        
+        if (!chatId) {
+            return res.status(400).json({
+                success: false,
+                error: 'chatId is required'
+            });
+        }
+        
+        if (!queryData) {
+            return res.status(400).json({
+                success: false,
+                error: 'queryData is required'
+            });
+        }
+        
+        // 🔒 VALIDATE SYSTEM EXISTS
+        const system = await prisma.system.findUnique({
+            where: { id: systemId }
+        });
+        
+        if (!system) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid systemId - system not found'
+            });
+        }
+        
+        // 🔒 CHECK USER PERMISSIONS USING PERMISSION SERVICE
+        const permissionResult = await checkUserPermissions(
+            systemId, 
+            chatId,
+            userId,
+            username,
+            'transaction_status'
+        );
+        
+        if (!permissionResult.success) {
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to check permissions',
+                details: permissionResult.error
+            });
+        }
+        
+        const { hasPermission, userRole, permissions, groupInfo, autoDetected } = permissionResult.data;
+        
+        if (!hasPermission) {
+            return res.status(403).json({
+                success: false,
+                error: 'Insufficient permissions to execute custom queries',
+                userRole: userRole,
+                permissions: permissions,
+                systemId: systemId,
+                groupInfo: groupInfo
+            });
+        }
+        
+        // 🔍 EXECUTE CUSTOM ELASTICSEARCH QUERY
+        const elasticsearchResult = await elasticsearchService.executeCustomQuery(
+            queryData,
+            systemId,
+            permissions
+        );
+        
+        // 📊 AUDIT LOG
+        console.log(`[AUDIT] Custom query request: System=${system.name}, User=${username}, Role=${userRole}, ChatId=${chatId}`);
+        
+        // Return results from Elasticsearch
+        const transactions = elasticsearchResult.success ? elasticsearchResult.data.transactions : [];
+        const totalTransactions = elasticsearchResult.success ? elasticsearchResult.data.totalTransactions : 0;
+        const dataSource = elasticsearchResult.success ? 'elasticsearch' : 'no_data';
+        
+        res.json({
+            success: true,
+            data: {
+                systemId: systemId,
+                systemName: system.name,
+                queryData: queryData,
+                userRole: userRole,
+                permissions: permissions,
+                groupInfo: groupInfo,
+                transactions: transactions,
+                totalTransactions: totalTransactions,
+                dataSource: dataSource,
+                elasticsearchHealth: await elasticsearchService.isHealthy(systemId),
+                elasticsearchUrl: elasticsearchResult.data?.elasticsearchUrl,
+                indexPattern: elasticsearchResult.data?.indexPattern,
+                rawResponse: elasticsearchResult.data?.rawResponse,
+                timestamp: new Date().toISOString()
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error executing custom query:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to execute custom query',
+            details: error.message
+        });
+    }
+};
+
+
 export {
     checkLogs,
-    checkTransactions
+    checkTransactions,
+    executeCustomQuery
 };

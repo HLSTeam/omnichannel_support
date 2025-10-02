@@ -1,51 +1,92 @@
 import axios from 'axios';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 /**
  * Elasticsearch Service for Logs Integration
  * Connects to Elasticsearch cluster and provides log querying capabilities using Axios
+ * Now supports dynamic Elasticsearch URLs per system
  */
 class ElasticsearchService {
     constructor() {
-        this.isConnected = false;
-        this.elasticsearchUrl = process.env.ELASTICSEARCH_URL || 'http://192.168.0.10:29200';
-        this.searchUrl = `${this.elasticsearchUrl}/_search`;
-        this.healthUrl = `${this.elasticsearchUrl}/_cluster/health`;
-        this.indicesUrl = `${this.elasticsearchUrl}/_cat/indices`;
+        // URL cache to avoid repeated database queries
+        this.urlCache = new Map();
+        // Cache TTL: 5 minutes
+        this.cacheTTL = 5 * 60 * 1000;
+        // Default fallback URL
+        this.defaultElasticsearchUrl = process.env.ELASTICSEARCH_URL || 'http://192.168.0.10:29200';
         
-        // Initialize connection
-        this.initializeConnection();
+        console.log('✅ ElasticsearchService initialized with dynamic URL support');
     }
 
     /**
-     * Initialize Elasticsearch connection using Axios
+     * Get Elasticsearch URL for a specific system
+     * Uses caching to minimize database queries
      */
-    async initializeConnection() {
+    async getElasticsearchUrl(systemId) {
+        if (!systemId) {
+            console.log('⚠️ No systemId provided, using default Elasticsearch URL');
+            return this.defaultElasticsearchUrl;
+        }
+
+        // Check cache first
+        const cached = this.urlCache.get(systemId);
+        if (cached && (Date.now() - cached.timestamp) < this.cacheTTL) {
+            return cached.url;
+        }
+
         try {
-            // Test connection with cluster health endpoint
-            const response = await axios.get(this.healthUrl, {
-                timeout: 30000,
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+            // Fetch system from database
+            const system = await prisma.system.findUnique({
+                where: { id: systemId },
+                select: { elasticUrl: true, name: true }
             });
+
+            if (!system) {
+                console.warn(`⚠️ System ${systemId} not found, using default Elasticsearch URL`);
+                return this.defaultElasticsearchUrl;
+            }
+
+            const elasticUrl = system.elasticUrl || this.defaultElasticsearchUrl;
             
-            console.log(`✅ Elasticsearch connected: ${this.elasticsearchUrl}`, {
-                status: response.data.status,
-                cluster_name: response.data.cluster_name
+            // Cache the URL
+            this.urlCache.set(systemId, {
+                url: elasticUrl,
+                timestamp: Date.now()
             });
-            this.isConnected = true;
+
+            console.log(`✅ Elasticsearch URL for system "${system.name}": ${elasticUrl}`);
+            return elasticUrl;
+
         } catch (error) {
-            console.error(`❌ Elasticsearch connection failed: ${this.elasticsearchUrl}`, error.message);
-            this.isConnected = false;
+            console.error(`❌ Error fetching Elasticsearch URL for system ${systemId}:`, error.message);
+            return this.defaultElasticsearchUrl;
         }
     }
 
     /**
-     * Check if Elasticsearch is connected and healthy
+     * Clear URL cache for a specific system or all systems
      */
-    async isHealthy() {
+    clearUrlCache(systemId = null) {
+        if (systemId) {
+            this.urlCache.delete(systemId);
+            console.log(`🗑️ Cleared Elasticsearch URL cache for system ${systemId}`);
+        } else {
+            this.urlCache.clear();
+            console.log('🗑️ Cleared all Elasticsearch URL cache');
+        }
+    }
+
+    /**
+     * Check if Elasticsearch is connected and healthy for a specific system
+     */
+    async isHealthy(systemId = null) {
         try {
-            const response = await axios.get(this.healthUrl, {
+            const elasticsearchUrl = await this.getElasticsearchUrl(systemId);
+            const healthUrl = `${elasticsearchUrl}/_cluster/health`;
+            
+            const response = await axios.get(healthUrl, {
                 timeout: 10000,
                 headers: {
                     'Content-Type': 'application/json'
@@ -59,240 +100,38 @@ class ElasticsearchService {
     }
 
     /**
-     * Search logs from Elasticsearch based on criteria
-     * @param {Object} criteria - Search criteria
-     * @param {string} criteria.systemId - System ID for isolation
-     * @param {string} [criteria.logType] - Log type filter (system|application|error|access)
-     * @param {string} [criteria.logLevel] - Log level filter (debug|info|warn|error)
-     * @param {string} [criteria.timeRange] - Time range (last_1_hour|last_24_hours|last_7_days) or ISO date string
-     * @param {string} [criteria.searchQuery] - Free text search query
-     * @param {number} [criteria.size] - Maximum number of logs to return (default: 50)
-     * @param {Array} [criteria.userPermissions] - User permissions for filtering
-     * @param {boolean} [criteria.trackTotalHits] - Whether to track total hits accurately (default: true)
-     * @param {Object} [criteria.customFilter] - Custom Elasticsearch filter body to apply
-     * @returns {Promise<Object>} Search results
+     * Test Elasticsearch connection for a specific system
      */
-    async searchLogs(criteria) {
+    async testConnection(systemId) {
         try {
-            if (!this.isConnected) {
-                throw new Error('Elasticsearch not connected');
-            }
-
-            const {
-                systemId,
-                logType,
-                logLevel,
-                timeRange = 'last_1_hour',
-                searchQuery,
-                size = 50,
-                userPermissions = [],
-                trackTotalHits = true,
-                customFilter
-            } = criteria;
-
-            // Use custom filter if provided, otherwise build standard query
-            let searchBody;
-            let query;
-            if (customFilter) {
-                searchBody = this.applyCustomFilter(customFilter, {
-                    searchQuery,
-                    timeRange,
-                    systemId,
-                    userPermissions
-                });
-                query = searchBody.query;
-            } else {
-                // Build standard Elasticsearch query
-                query = this.buildLogQuery({
-                    systemId,
-                    logType,
-                    logLevel,
-                    timeRange,
-                    searchQuery,
-                    userPermissions
-                });
-
-                searchBody = {
-                    query: query,
-                    sort: [
-                        { '@timestamp': { order: 'desc' } }
-                    ],
-                    size: size,
-                    track_total_hits: trackTotalHits,
-                    _source: {
-                        includes: [
-                            '@timestamp',
-                            'level',
-                            'message',
-                            'messageTemplate',
-                            'fields',
-                            'system_id',
-                            //'log_type',
-                            //'host',
-                            //'environment',
-                        ]
-                    }
-                };
-            }
-
-            console.log(`🔍 Elasticsearch query for system ${systemId}:`, JSON.stringify(searchBody, null, 2));
-
-            // Execute search using axios
-            const config = {
-                method: 'post',
-                maxBodyLength: Infinity,
-                url: this.searchUrl,
-                headers: { 
-                    'Content-Type': 'application/json'
-                },
-                data: JSON.stringify(searchBody),
-                timeout: 30000
-            };
-
-            const response = await axios.request(config);
+            const elasticsearchUrl = await this.getElasticsearchUrl(systemId);
+            const healthUrl = `${elasticsearchUrl}/_cluster/health`;
             
-            // Process and format results
-            const logs = this.formatLogResults(response.data.hits.hits, systemId);
+            const response = await axios.get(healthUrl, {
+                timeout: 10000,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            console.log(`✅ Elasticsearch connected for system ${systemId}: ${elasticsearchUrl}`, {
+                status: response.data.status,
+                cluster_name: response.data.cluster_name
+            });
             
             return {
                 success: true,
-                data: {
-                    logs: logs,
-                    totalLogs: response.data.hits.total.value || response.data.hits.total,
-                    query: query,
-                    indexPattern: this.getLogIndexPattern(systemId)
-                }
+                status: response.data.status,
+                clusterName: response.data.cluster_name,
+                url: elasticsearchUrl
             };
-
         } catch (error) {
-            console.error('Elasticsearch log search failed:', error.message);
-            
-            // Return empty results if Elasticsearch fails
+            console.error(`❌ Elasticsearch connection failed for system ${systemId}:`, error.message);
             return {
                 success: false,
-                error: error.message,
-                data: {
-                    logs: [],
-                    totalLogs: 0,
-                    query: null,
-                    indexPattern: this.getLogIndexPattern(criteria.systemId)
-                }
+                error: error.message
             };
         }
-    }
-
-    /**
-     * Build Elasticsearch query based on criteria
-     */
-    buildLogQuery({ systemId, logType, logLevel, timeRange, searchQuery, userPermissions }) {
-        const mustClauses = [];
-        const filterClauses = [];
-
-        // System isolation - CRITICAL for multi-system architecture
-        // if (systemId) {
-        //     filterClauses.push({
-        //         term: { 'system_id.keyword': systemId }
-        //     });
-        // }
-
-        // Log type filter
-        // if (logType) {
-        //     filterClauses.push({
-        //         term: { 'log_type.keyword': logType }
-        //     });
-        // }
-
-        // Log level filter - Updated to match the actual field structure
-        // if (logLevel) {
-        //     filterClauses.push({
-        //         term: { 'level.keyword': logLevel }
-        //     });
-        // }
-
-        // Time range filter
-        const timeFilter = this.getTimeRangeFilter(timeRange);
-        if (timeFilter) {
-            filterClauses.push(timeFilter);
-        }
-
-        // Free text search
-        if (searchQuery) {
-            mustClauses.push({
-                multi_match: {
-                    query: searchQuery,
-                    fields: ['message^2', 'messageTemplate', 'fields.*'],
-                    type: 'best_fields',
-                    fuzziness: 'AUTO'
-                }
-            });
-        }
-
-        // User permission-based filtering
-        if (!userPermissions.includes('view_all') && !userPermissions.includes('system_logs')) {
-            // Restrict sensitive logs for non-admin users
-            filterClauses.push({
-                bool: {
-                    must_not: [
-                        { term: { 'level.keyword': 'DEBUG' } },
-                        { term: { 'log_type.keyword': 'system' } }
-                    ]
-                }
-            });
-        }
-
-        return {
-            bool: {
-                must: mustClauses,
-                filter: filterClauses
-            }
-        };
-    }
-
-    /**
-     * Apply custom filter with template variable replacement
-     * @param {Object} customFilter - Custom Elasticsearch filter body
-     * @param {Object} variables - Variables to replace in the filter
-     * @returns {Object} Processed filter body
-     */
-    applyCustomFilter(customFilter, variables) {
-        const { searchQuery, timeRange, systemId, userPermissions = [] } = variables;
-        
-        // Deep clone the custom filter to avoid mutation
-        let filterBody = JSON.parse(JSON.stringify(customFilter));
-        
-        // Convert filter body to string for template replacement
-        let filterString = JSON.stringify(filterBody);
-        
-        // Replace template variables
-        if (searchQuery) {
-            filterString = filterString.replace(/\{searchQuery\}/g, searchQuery);
-        } else {
-            // If no search query, remove the match clause or replace with match_all
-            filterString = filterString.replace(/\{\s*"match"\s*:\s*\{\s*"message"\s*:\s*"\{searchQuery\}"\s*\}\s*\}/g, '{"match_all": {}}');
-        }
-        
-        // Handle time range replacement
-        if (timeRange) {
-            let timeValue;
-            if (timeRange.includes('last_')) {
-                // Convert preset time ranges to ISO dates
-                timeValue = this.getTimeRangeValue(timeRange);
-            } else {
-                // Assume it's already an ISO date string
-                timeValue = timeRange;
-            }
-            filterString = filterString.replace(/\{timeRange\}/g, timeValue);
-        }
-        
-        // Parse back to object
-        filterBody = JSON.parse(filterString);
-        
-        // Apply system isolation and permission-based filtering
-        if (systemId || userPermissions.length > 0) {
-            filterBody = this.addSystemAndPermissionFilters(filterBody, systemId, userPermissions);
-        }
-        
-        return filterBody;
     }
 
     /**
@@ -388,125 +227,29 @@ class ElasticsearchService {
     }
 
     /**
-     * Get log index pattern based on system ID
-     */
-    getLogIndexPattern(systemId) {
-        // Updated to match the actual index pattern from your response
-        return `nine-tech-topup-log-*`;
-    }
-
-    /**
-     * Format Elasticsearch results to standard log format
-     */
-    formatLogResults(hits, systemId) {
-        return hits.map((hit, index) => {
-            const source = hit._source;
-            const timestamp = source['@timestamp'] || new Date().toISOString();
-            
-            // Extract fields from the response structure
-            const fields = source.fields || {};
-            
-            return {
-                id: hit._id || `es_log_${systemId}_${index}`,
-                timestamp: timestamp,
-                level: (source.level || 'INFO').toLowerCase(),
-                type: fields.Application || fields.SourceContext || 'application',
-                message: source.message || source.messageTemplate || 'No message',
-                source: fields.Application || fields.SourceContext || 'elasticsearch',
-                systemId: source.system_id || systemId,
-                host: fields.host,
-                environment: source.environment,
-                context: fields,
-                error: fields.error,
-                _index: hit._index,
-                _score: hit._score
-            };
-        });
-    }
-
-
-    /**
-     * Get available log indices for a system
-     */
-    async getSystemIndices(systemId) {
-        try {
-            if (!this.isConnected) {
-                throw new Error('Elasticsearch not connected');
-            }
-
-            const pattern = this.getLogIndexPattern(systemId);
-            const config = {
-                method: 'get',
-                url: `${this.indicesUrl}/${pattern}?format=json`,
-                headers: { 
-                    'Content-Type': 'application/json'
-                },
-                timeout: 10000
-            };
-
-            const response = await axios.request(config);
-
-            return {
-                success: true,
-                indices: response.data || []
-            };
-        } catch (error) {
-            console.error('Failed to get system indices:', error.message);
-            return {
-                success: false,
-                error: error.message,
-                indices: []
-            };
-        }
-    }
-
-    /**
-     * Check if system has any log data
-     */
-    async hasLogData(systemId) {
-        try {
-            const result = await this.searchLogs({
-                systemId,
-                size: 1,
-                timeRange: 'last_7_days'
-            });
-
-            return result.success && result.data.totalLogs > 0;
-        } catch (error) {
-            console.error('Failed to check log data:', error.message);
-            return false;
-        }
-    }
-
-    /**
      * Search transactions from Elasticsearch based on criteria
-     * @param {Object} criteria - Search criteria
-     * @param {string} criteria.systemId - System ID for isolation
-     * @param {string} [criteria.transactionId] - Specific transaction ID
-     * @param {string} [criteria.status] - Transaction status filter (completed|pending|failed|cancelled)
-     * @param {string} [criteria.transactionType] - Transaction type filter (topup|card_purchase|airtime|data_package)
-     * @param {string} [criteria.timeRange] - Time range (last_1_hour|last_24_hours|last_7_days)
-     * @param {string} [criteria.searchQuery] - Free text search query
-     * @param {number} [criteria.size] - Maximum number of transactions to return (default: 100)
-     * @param {Array} [criteria.userPermissions] - User permissions for filtering
-     * @returns {Promise<Object>} Search results
+     * Now uses dynamic Elasticsearch URL per system
      */
     async searchTransactions(criteria) {
         try {
-            if (!this.isConnected) {
-                throw new Error('Elasticsearch not connected');
-            }
-
             const {
                 systemId,
                 transactionId,
                 status,
                 transactionType,
-                timeRange = 'last_24_hours',
+                timeRange = 'last_7_days',
                 searchQuery,
                 size = 100,
                 userPermissions = []
             } = criteria;
+
+            if (!systemId) {
+                throw new Error('systemId is required for transaction search');
+            }
+
+            // Get Elasticsearch URL for this system
+            const elasticsearchUrl = await this.getElasticsearchUrl(systemId);
+            const searchUrl = `${elasticsearchUrl}/_search`;
 
             // Build Elasticsearch query for transactions
             const query = this.buildTransactionQuery({
@@ -519,47 +262,22 @@ class ElasticsearchService {
                 userPermissions
             });
 
-            // Build search body
+            // Build search body following the provided query structure
             const searchBody = {
                 query: query,
-                sort: [
-                    { '@timestamp': { order: 'desc' } },
-                    { 'timestamp': { order: 'desc' } },
-                    { 'created_at': { order: 'desc' } }
-                ],
                 size: size,
-                track_total_hits: true,
                 _source: [
-                    '@timestamp',
-                    'timestamp',
-                    'created_at',
-                    'transaction_id',
-                    'status',
-                    'type',
-                    'transaction_type',
-                    'amount',
-                    'currency',
-                    'details',
-                    'description',
-                    'system_id',
-                    'provider',
-                    'user_id',
-                    'customer_id',
-                    'reference',
-                    'payment_method',
-                    'fee',
-                    'error_code',
-                    'error_message'
+                    "@timestamp",
+                    "level",
+                    "message",
                 ]
             };
-
-            console.log(`🔍 Elasticsearch transaction query for system ${systemId}:`, JSON.stringify(searchBody, null, 2));
 
             // Execute search using axios
             const config = {
                 method: 'post',
                 maxBodyLength: Infinity,
-                url: this.searchUrl,
+                url: searchUrl,
                 headers: { 
                     'Content-Type': 'application/json'
                 },
@@ -567,18 +285,18 @@ class ElasticsearchService {
                 timeout: 30000
             };
 
+            console.log(`🔍 Searching Elasticsearch for system ${systemId} at ${elasticsearchUrl}`);
+
             const response = await axios.request(config);
-            
-            // Process and format results
-            const transactions = this.formatTransactionResults(response.data.hits.hits, systemId);
-            
+                    
             return {
                 success: true,
                 data: {
-                    transactions: transactions,
+                    transactions: response.data.hits.hits,
                     totalTransactions: response.data.hits.total.value || response.data.hits.total,
                     query: query,
-                    indexPattern: this.getTransactionIndexPattern(systemId)
+                    indexPattern: this.getTransactionIndexPattern(systemId),
+                    elasticsearchUrl: elasticsearchUrl
                 }
             };
 
@@ -593,7 +311,8 @@ class ElasticsearchService {
                     transactions: [],
                     totalTransactions: 0,
                     query: null,
-                    indexPattern: this.getTransactionIndexPattern(criteria.systemId)
+                    indexPattern: this.getTransactionIndexPattern(criteria.systemId),
+                    elasticsearchUrl: null
                 }
             };
         }
@@ -601,79 +320,96 @@ class ElasticsearchService {
 
     /**
      * Build Elasticsearch query for transactions based on criteria
+     * Follows the structure: { bool: { must: [], filter: [], should: [], must_not: [] } }
      */
     buildTransactionQuery({ systemId, transactionId, status, transactionType, timeRange, searchQuery, userPermissions }) {
         const mustClauses = [];
         const filterClauses = [];
+        const shouldClauses = [];
+        const mustNotClauses = [];
 
-        // System isolation - CRITICAL for multi-system architecture
-        if (systemId) {
-            filterClauses.push({
-                term: { 'system_id.keyword': systemId }
-            });
-        }
+        // System isolation
+        // if (systemId) {
+        //     filterClauses.push({
+        //         term: { 'system_id.keyword': systemId }
+        //     });
+        // }
 
-        // Specific transaction ID
+        // Specific transaction ID - use multi_match for flexible searching
         if (transactionId) {
             filterClauses.push({
-                term: { 'transaction_id.keyword': transactionId }
-            });
-        }
-
-        // Transaction status filter
-        if (status) {
-            filterClauses.push({
-                term: { 'status.keyword': status.toLowerCase() }
-            });
-        }
-
-        // Transaction type filter
-        if (transactionType) {
-            filterClauses.push({
-                bool: {
-                    should: [
-                        { term: { 'type.keyword': transactionType } },
-                        { term: { 'transaction_type.keyword': transactionType } }
-                    ]
+                multi_match: {
+                    type: "best_fields",
+                    query: transactionId,
+                    lenient: true,
+                    // fields: ['transaction_id', 'transaction_id.keyword', 'reference', 'reference.keyword']
                 }
             });
         }
 
-        // Time range filter
-        const timeFilter = this.getTimeRangeFilter(timeRange);
-        if (timeFilter) {
-            filterClauses.push(timeFilter);
+        // // Transaction status filter
+        // if (status) {
+        //     filterClauses.push({
+        //         term: { 'status.keyword': status.toLowerCase() }
+        //     });
+        // }
+
+        // // Transaction type filter
+        // if (transactionType) {
+        //     filterClauses.push({
+        //         bool: {
+        //             should: [
+        //                 { term: { 'type.keyword': transactionType } },
+        //                 { term: { 'transaction_type.keyword': transactionType } }
+        //             ]
+        //         }
+        //     });
+        // }
+
+        // Time range filter - use strict_date_optional_time format
+        if (timeRange) {
+            const timeFilter = this.getTimeRangeFilter(timeRange);
+            if (timeFilter) {
+                // Update time filter to use strict_date_optional_time format
+                const updatedTimeFilter = {
+                    range: {
+                        '@timestamp': {
+                            format: "strict_date_optional_time",
+                            gte: timeFilter.range['@timestamp'].gte,
+                            lte: timeFilter.range['@timestamp'].lte
+                        }
+                    }
+                };
+                filterClauses.push(updatedTimeFilter);
+            }
         }
 
-        // Free text search
+        // Free text search - use multi_match with best_fields and lenient
         if (searchQuery) {
-            mustClauses.push({
+            filterClauses.push({
                 multi_match: {
+                    type: "best_fields",
                     query: searchQuery,
-                    fields: ['details^2', 'description^2', 'transaction_id', 'reference', 'provider'],
-                    type: 'best_fields',
-                    fuzziness: 'AUTO'
+                    lenient: true
                 }
             });
         }
 
         // User permission-based filtering
-        if (!userPermissions.includes('view_all') && !userPermissions.includes('transaction_status')) {
-            // Restrict sensitive transaction data for non-admin users
-            filterClauses.push({
-                bool: {
-                    must_not: [
-                        { term: { 'status.keyword': 'failed' } },
-                        { exists: { field: 'error_code' } }
-                    ]
-                }
-            });
-        }
+        // if (!userPermissions.includes('view_all') && !userPermissions.includes('transaction_status')) {
+        //     // Restrict sensitive transaction data for non-admin users
+        //     mustNotClauses.push(
+        //         { term: { 'status.keyword': 'failed' } },
+        //         { exists: { field: 'error_code' } }
+        //     );
+        // }
 
         return {
             bool: {
                 must: mustClauses,
-                filter: filterClauses
+                filter: filterClauses,
+                should: shouldClauses,
+                must_not: mustNotClauses
             }
         };
     }
@@ -687,36 +423,92 @@ class ElasticsearchService {
     }
 
     /**
-     * Format Elasticsearch transaction results to standard format
+     * Execute custom Elasticsearch query with provided query structure
+     * Accepts a full Elasticsearch query object following the provided format
+     * Now uses dynamic Elasticsearch URL per system
      */
-    formatTransactionResults(hits, systemId) {
-        return hits.map((hit, index) => {
-            const source = hit._source;
-            const timestamp = source['@timestamp'] || source.timestamp || source.created_at || new Date().toISOString();
+    async executeCustomQuery(queryData, systemId = null, userPermissions = []) {
+        try {
+            // Validate query structure
+            if (!queryData || !queryData.query) {
+                throw new Error('Invalid query data - query object is required');
+            }
+
+            if (!systemId) {
+                throw new Error('systemId is required for custom query execution');
+            }
+
+            // Get Elasticsearch URL for this system
+            const elasticsearchUrl = await this.getElasticsearchUrl(systemId);
+            const searchUrl = `${elasticsearchUrl}/_search`;
+
+            // Add system isolation if systemId is provided
+            if (systemId && queryData.query.bool && queryData.query.bool.filter) {
+                queryData.query.bool.filter.push({
+                    term: { 'system_id.keyword': systemId }
+                });
+            }
+
+            // Add permission-based filtering
+            if (!userPermissions.includes('view_all') && !userPermissions.includes('transaction_status')) {
+                if (queryData.query.bool && queryData.query.bool.must_not) {
+                    queryData.query.bool.must_not.push(
+                        { term: { 'status.keyword': 'failed' } },
+                        { exists: { field: 'error_code' } }
+                    );
+                } else if (queryData.query.bool) {
+                    queryData.query.bool.must_not = [
+                        { term: { 'status.keyword': 'failed' } },
+                        { exists: { field: 'error_code' } }
+                    ];
+                }
+            }
+
+            console.log(`🔍 Executing custom query for system ${systemId} at ${elasticsearchUrl}`);
+
+            // Execute search using axios
+            const config = {
+                method: 'post',
+                maxBodyLength: Infinity,
+                url: searchUrl,
+                headers: { 
+                    'Content-Type': 'application/json'
+                },
+                data: JSON.stringify(queryData),
+                timeout: 30000
+            };
+
+            const response = await axios.request(config);
             
             return {
-                id: source.transaction_id || hit._id || `es_trans_${systemId}_${index}`,
-                timestamp: timestamp,
-                status: (source.status || 'unknown').toLowerCase(),
-                type: source.type || source.transaction_type || 'unknown',
-                amount: source.amount || 0,
-                currency: source.currency || 'VND',
-                details: source.details || source.description || 'No details',
-                systemId: source.system_id || systemId,
-                provider: source.provider || 'unknown',
-                userId: source.user_id,
-                customerId: source.customer_id,
-                reference: source.reference,
-                paymentMethod: source.payment_method,
-                fee: source.fee,
-                errorCode: source.error_code,
-                errorMessage: source.error_message,
-                _index: hit._index,
-                _score: hit._score
+                success: true,
+                data: {
+                    transactions: response.data.hits.hits,
+                    totalTransactions: response.data.hits.total.value || response.data.hits.total,
+                    query: queryData.query,
+                    rawResponse: response.data,
+                    indexPattern: this.getTransactionIndexPattern(systemId),
+                    elasticsearchUrl: elasticsearchUrl
+                }
             };
-        });
-    }
 
+        } catch (error) {
+            console.error('Custom Elasticsearch query failed:', error.message);
+            
+            return {
+                success: false,
+                error: error.message,
+                data: {
+                    transactions: [],
+                    totalTransactions: 0,
+                    query: queryData?.query || null,
+                    rawResponse: null,
+                    indexPattern: this.getTransactionIndexPattern(systemId),
+                    elasticsearchUrl: null
+                }
+            };
+        }
+    }
 
     /**
      * Check if system has any transaction data
@@ -734,56 +526,6 @@ class ElasticsearchService {
             console.error('Failed to check transaction data:', error.message);
             return false;
         }
-    }
-
-    /**
-     * Search logs using the provided custom filter template
-     * This is a convenience method that applies the specific filter structure you provided
-     * @param {Object} criteria - Search criteria
-     * @param {string} criteria.systemId - System ID for isolation
-     * @param {string} [criteria.searchQuery] - Free text search query to replace {searchQuery}
-     * @param {string} [criteria.timeRange] - Time range to replace {timeRange}
-     * @param {Array} [criteria.userPermissions] - User permissions for filtering
-     * @returns {Promise<Object>} Search results
-     */
-    async searchLogsWithCustomFilter(criteria) {
-        // The custom filter template you provided
-        const customFilterTemplate = {
-            "size": 50,
-            "track_total_hits": true,
-            "sort": [
-                {
-                    "@timestamp": {
-                        "order": "desc"
-                    }
-                }
-            ],
-            "query": {
-                "bool": {
-                    "must": [
-                        {
-                            "match": {
-                                "message": "{searchQuery}"
-                            }
-                        }
-                    ],
-                    "filter": [
-                        {
-                            "range": {
-                                "@timestamp": {
-                                    "gte": "{timeRange}"
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        };
-
-        return this.searchLogs({
-            ...criteria,
-            customFilter: customFilterTemplate
-        });
     }
 }
 

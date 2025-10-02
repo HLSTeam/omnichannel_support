@@ -93,6 +93,7 @@ model Rule {
 model System {
   id                String              @id @default(cuid())
   name              String
+  elasticUrl        String?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @default(now())
   Channel           Channel[]
