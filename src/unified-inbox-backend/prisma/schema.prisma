@@ -101,6 +101,7 @@ model System {
   Rule              Rule[]
   user_declarations UserDeclaration[]
   group_permissions group_permissions[]
+  group_topics      group_topics[]
   helpdesk_tickets  helpdesk_tickets[]
   telegram_groups   telegram_groups[]
 }
@@ -186,8 +187,27 @@ model telegram_groups {
   systemId          String
   user_declarations UserDeclaration[]
   notification_logs notification_logs[]
+  group_topics      group_topics[]
   System            System              @relation(fields: [systemId], references: [id])
   group_permissions group_permissions[] @relation("GroupPermissionToTelegramGroup")
+}
+
+model group_topics {
+  id              String          @id @default(cuid())
+  topicName       String
+  topicId         String?         // Telegram thread/topic ID (for forum groups)
+  description     String?
+  isActive        Boolean         @default(true)
+  systemId        String
+  groupId         String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @default(now())
+  telegram_groups telegram_groups @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  System          System          @relation(fields: [systemId], references: [id])
+
+  @@unique([groupId, topicName])
+  @@index([groupId])
+  @@index([systemId])
 }
 
 model ticket_assignments {

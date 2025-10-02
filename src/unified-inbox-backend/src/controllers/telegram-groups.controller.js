@@ -15,6 +15,20 @@ const getAllGroups = async (req, res) => {
             where: whereClause,
             include: {
                 group_permissions: true,
+                group_topics: {
+                    where: {
+                        isActive: true
+                    },
+                    include: {
+                        System: {
+                            select: {
+                                id: true,
+                                name: true,
+                                elasticUrl: true
+                            }
+                        }
+                    }
+                },
                 System: {
                     select: {
                         id: true,
@@ -65,6 +79,20 @@ const getGroupsByType = async (req, res) => {
             },
             include: {
                 group_permissions: true,
+                group_topics: {
+                    where: {
+                        isActive: true
+                    },
+                    include: {
+                        System: {
+                            select: {
+                                id: true,
+                                name: true,
+                                elasticUrl: true
+                            }
+                        }
+                    }
+                },
                 System: {
                     select: {
                         id: true,
@@ -258,6 +286,20 @@ const createGroup = async (req, res) => {
             },
             include: {
                 group_permissions: true,
+                group_topics: {
+                    where: {
+                        isActive: true
+                    },
+                    include: {
+                        System: {
+                            select: {
+                                id: true,
+                                name: true,
+                                elasticUrl: true
+                            }
+                        }
+                    }
+                },
                 System: {
                     select: {
                         id: true,
@@ -340,6 +382,20 @@ const updateGroup = async (req, res) => {
             },
             include: {
                 group_permissions: true,
+                group_topics: {
+                    where: {
+                        isActive: true
+                    },
+                    include: {
+                        System: {
+                            select: {
+                                id: true,
+                                name: true,
+                                elasticUrl: true
+                            }
+                        }
+                    }
+                },
                 System: {
                     select: {
                         id: true,
@@ -375,6 +431,20 @@ const updateGroup = async (req, res) => {
                 where: { id },
                 include: {
                     group_permissions: true,
+                    group_topics: {
+                        where: {
+                            isActive: true
+                        },
+                        include: {
+                            System: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    elasticUrl: true
+                                }
+                            }
+                        }
+                    },
                     System: {
                         select: {
                             id: true,
