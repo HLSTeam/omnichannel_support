@@ -1,4 +1,4 @@
-# Dockerfile cho unified-inbox-backend (Node.js)
+# Dockerfile cho Backend Node.js
 FROM node:18-alpine
 
 # Thiết lập thư mục làm việc
@@ -10,11 +10,17 @@ COPY package.json package-lock.json ./
 # Cài đặt dependencies
 RUN npm install
 
+# Copy prisma schema
+COPY prisma ./prisma
+
+# Generate Prisma Client
+RUN npx prisma generate
+
 # Copy toàn bộ source code
 COPY . .
 
-# Expose port (port mặc định, thay đổi nếu cần)
+# Expose port
 EXPOSE 3000
 
-# Chạy ứng dụng Node.js
-CMD ["node", "src/app.js"]
+# Chạy migrations (nếu có mới) và start app
+CMD ["sh", "-c", "npx prisma migrate deploy && node src/app.js"]
