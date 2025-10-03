@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 // Check system logs for specific system
 const checkLogs = async (req, res) => {
     try {
-        const { systemId, chatId, logType, chatTitle, userId, username, timeRange, logLevel, searchQuery, requestText } = req.body;
+        const { systemId, chatId, msgThreadId, logType, chatTitle, userId, username, timeRange, logLevel, searchQuery, requestText } = req.body;
         
         // 🔒 VALIDATE REQUIRED FIELDS
         if (!systemId) {
@@ -70,6 +70,8 @@ const checkLogs = async (req, res) => {
         // 🔍 ELASTICSEARCH LOG SEARCH
         const elasticsearchResult = await elasticsearchService.searchTransactions({
             systemId,
+            chatId,
+            msgThreadId,
             logType,
             logLevel,
             timeRange,
@@ -81,7 +83,7 @@ const checkLogs = async (req, res) => {
         console.log('elasticsearchResult', elasticsearchResult);
         
         // 📊 AUDIT LOG
-        console.log(`[AUDIT] Check logs request: System=${system.name}, User=${username}, Role=${userRole}, ChatId=${chatId}`);
+        console.log(`[AUDIT] Check logs request: System=${system.name}, User=${username}, Role=${userRole}, ChatId=${chatId}, MsgThreadId=${msgThreadId}`);
         
         // Return logs from Elasticsearch or empty array if no data
         const logs = elasticsearchResult.success ? elasticsearchResult.data.transactions : [];
@@ -124,7 +126,7 @@ const checkLogs = async (req, res) => {
 // Check transaction status for specific system
 const checkTransactions = async (req, res) => {
     try {
-        const { systemId, chatId, transactionId, chatTitle, username, timeRange, status } = req.body;
+        const { systemId, chatId, msgThreadId, transactionId, chatTitle, username, timeRange, status } = req.body;
         
         // 🔒 VALIDATE REQUIRED FIELDS
         if (!systemId) {
@@ -186,6 +188,8 @@ const checkTransactions = async (req, res) => {
         // 🔍 ELASTICSEARCH TRANSACTION SEARCH (Replaces mock data)
         const elasticsearchResult = await elasticsearchService.searchTransactions({
             systemId,
+            chatId,
+            msgThreadId,
             transactionId,
             status,
             timeRange,
@@ -194,7 +198,7 @@ const checkTransactions = async (req, res) => {
         });
         
         // 📊 AUDIT LOG
-        console.log(`[AUDIT] Check trans request: System=${system.name}, User=${username}, Role=${userRole}, TransactionId=${transactionId}, ChatId=${chatId}`);
+        console.log(`[AUDIT] Check trans request: System=${system.name}, User=${username}, Role=${userRole}, TransactionId=${transactionId}, ChatId=${chatId}, MsgThreadId=${msgThreadId}`);
         
         // Return transactions from Elasticsearch or empty array if no data
         const transactions = elasticsearchResult.success ? elasticsearchResult.data.transactions : [];
@@ -239,7 +243,7 @@ const checkTransactions = async (req, res) => {
 // Execute custom Elasticsearch query for transactions
 const executeCustomQuery = async (req, res) => {
     try {
-        const { systemId, chatId, queryData, chatTitle, username, userId } = req.body;
+        const { systemId, chatId, msgThreadId, queryData, chatTitle, username, userId } = req.body;
         
         // 🔒 VALIDATE REQUIRED FIELDS
         if (!systemId) {
@@ -309,11 +313,13 @@ const executeCustomQuery = async (req, res) => {
         const elasticsearchResult = await elasticsearchService.executeCustomQuery(
             queryData,
             systemId,
-            permissions
+            permissions,
+            chatId,
+            msgThreadId
         );
         
         // 📊 AUDIT LOG
-        console.log(`[AUDIT] Custom query request: System=${system.name}, User=${username}, Role=${userRole}, ChatId=${chatId}`);
+        console.log(`[AUDIT] Custom query request: System=${system.name}, User=${username}, Role=${userRole}, ChatId=${chatId}, MsgThreadId=${msgThreadId}`);
         
         // Return results from Elasticsearch
         const transactions = elasticsearchResult.success ? elasticsearchResult.data.transactions : [];

@@ -8,37 +8,37 @@ async function seedHelpdeskData() {
 
     // Create sample agents if they don't exist
     const adminAgent = await prisma.agent.upsert({
-      where: { email: 'admin@helpdesk.com' },
+      where: { email: 'admin@hls.vn' },
       update: {},
       create: {
         id: 'admin-agent-id-001',
-        email: 'admin@helpdesk.com',
+        email: 'admin@hls.vn',
         name: 'Admin Agent',
-        password: '$2a$10$//lYJU1UOJjSVIwknrfvI.D/u27EYk8uGrFGDeZYa77iQP07e58ly', // In real app, hash this
+        password: '$2a$10$eIsdn8pvpWjFue1CIDv1Ved3oYJ/Cg/nb/mmt0Q0giN1f5RXP3mEC', // In real app, hash this
         role: 'ADMIN'
       }
     });
 
     const supportAgent = await prisma.agent.upsert({
-      where: { email: 'support@helpdesk.com' },
+      where: { email: 'support@hls.vn' },
       update: {},
       create: {
         id: 'support-agent-id-002',
-        email: 'support@helpdesk.com',
+        email: 'support@hls.vn',
         name: 'Support Agent',
-        password: '$2a$10$//lYJU1UOJjSVIwknrfvI.D/u27EYk8uGrFGDeZYa77iQP07e58ly', // In real app, hash this
+        password: '$2a$10$eIsdn8pvpWjFue1CIDv1Ved3oYJ/Cg/nb/mmt0Q0giN1f5RXP3mEC', // In real app, hash this
         role: 'AGENT'
       }
     });
 
     const customerAgent = await prisma.agent.upsert({
-      where: { email: 'customer@helpdesk.com' },
+      where: { email: 'customer@hls.vn' },
       update: {},
       create: {
         id: 'customer-agent-id-003',
-        email: 'customer@helpdesk.com',
+        email: 'customer@hls.vn',
         name: 'Customer Agent',
-        password: '$2a$10$//lYJU1UOJjSVIwknrfvI.D/u27EYk8uGrFGDeZYa77iQP07e58ly', // In real app, hash this
+        password: '$2a$10$eIsdn8pvpWjFue1CIDv1Ved3oYJ/Cg/nb/mmt0Q0giN1f5RXP3mEC', // In real app, hash this
         role: 'AGENT'
       }
     });

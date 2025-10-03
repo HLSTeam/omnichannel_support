@@ -23,35 +23,119 @@ class ElasticsearchService {
     /**
      * Get Elasticsearch URL for a specific system
      * Uses caching to minimize database queries
+     * Supports lookup by chatId and msgThreadId via group_topics
      */
-    async getElasticsearchUrl(systemId) {
-        if (!systemId) {
-            console.log('⚠️ No systemId provided, using default Elasticsearch URL');
-            return this.defaultElasticsearchUrl;
-        }
-
-        // Check cache first
-        const cached = this.urlCache.get(systemId);
-        if (cached && (Date.now() - cached.timestamp) < this.cacheTTL) {
-            return cached.url;
-        }
+    async getElasticsearchUrl(systemId, chatId = null, msgThreadId = null) {
+        // Create cache key based on available parameters
+        let cacheKey = systemId;
+        let resolvedSystemId = systemId;
 
         try {
+            // First, try to resolve systemId from chatId and msgThreadId
+            if (chatId) {
+                if (msgThreadId) {
+                    // Look up system from group_topics using chatId and topicId (msgThreadId)
+                    const groupTopic = await prisma.group_topics.findFirst({
+                        where: {
+                            topicId: msgThreadId.toString(),
+                            telegram_groups: {
+                                chatId: chatId.toString()
+                            },
+                            isActive: true
+                        },
+                        include: {
+                            System: {
+                                select: { 
+                                    id: true,
+                                    elasticUrl: true, 
+                                    name: true 
+                                }
+                            }
+                        }
+                    });
+
+                    if (groupTopic && groupTopic.System) {
+                        resolvedSystemId = groupTopic.System.id;
+                        cacheKey = `${chatId}-${msgThreadId}`;
+                        
+                        const elasticUrl = groupTopic.System.elasticUrl || this.defaultElasticsearchUrl;
+                        
+                        // Cache the URL
+                        this.urlCache.set(cacheKey, {
+                            url: elasticUrl,
+                            timestamp: Date.now()
+                        });
+
+                        console.log(`✅ Elasticsearch URL from topic for system "${groupTopic.System.name}": ${elasticUrl}`);
+                        return elasticUrl;
+                    } else {
+                        console.log(`⚠️ No group topic found for chatId: ${chatId}, msgThreadId: ${msgThreadId}, falling back to group system`);
+                    }
+                }
+                
+                // If msgThreadId is null or not found, get default system from telegram_groups
+                const telegramGroup = await prisma.telegram_groups.findFirst({
+                    where: {
+                        chatId: chatId.toString(),
+                        isActive: true
+                    },
+                    include: {
+                        System: {
+                            select: {
+                                id: true,
+                                elasticUrl: true,
+                                name: true
+                            }
+                        }
+                    }
+                });
+
+                if (telegramGroup && telegramGroup.System) {
+                    resolvedSystemId = telegramGroup.System.id;
+                    cacheKey = `${chatId}-default`;
+                    
+                    const elasticUrl = telegramGroup.System.elasticUrl || this.defaultElasticsearchUrl;
+                    
+                    // Cache the URL
+                    this.urlCache.set(cacheKey, {
+                        url: elasticUrl,
+                        timestamp: Date.now()
+                    });
+
+                    console.log(`✅ Elasticsearch URL from group default for system "${telegramGroup.System.name}": ${elasticUrl}`);
+                    return elasticUrl;
+                } else {
+                    console.log(`⚠️ No telegram group found for chatId: ${chatId}, using systemId`);
+                }
+            }
+
+            // Fallback to systemId-based lookup
+            if (!resolvedSystemId) {
+                console.log('⚠️ No systemId or chatId provided, using default Elasticsearch URL');
+                return this.defaultElasticsearchUrl;
+            }
+
+            // Check cache first
+            const cached = this.urlCache.get(cacheKey);
+            if (cached && (Date.now() - cached.timestamp) < this.cacheTTL) {
+                return cached.url;
+            }
+
             // Fetch system from database
             const system = await prisma.system.findUnique({
-                where: { id: systemId },
+                where: { id: resolvedSystemId },
                 select: { elasticUrl: true, name: true }
             });
 
             if (!system) {
-                console.warn(`⚠️ System ${systemId} not found, using default Elasticsearch URL`);
+                console.warn(`⚠️ System ${resolvedSystemId} not found, using default Elasticsearch URL`);
                 return this.defaultElasticsearchUrl;
             }
 
             const elasticUrl = system.elasticUrl || this.defaultElasticsearchUrl;
             
             // Cache the URL
-            this.urlCache.set(systemId, {
+            this.urlCache.set(cacheKey, {
                 url: elasticUrl,
                 timestamp: Date.now()
             });
@@ -60,7 +144,7 @@ class ElasticsearchService {
             return elasticUrl;
 
         } catch (error) {
-            console.error(`❌ Error fetching Elasticsearch URL for system ${systemId}:`, error.message);
+            console.error(`❌ Error fetching Elasticsearch URL:`, error.message);
             return this.defaultElasticsearchUrl;
         }
     }
@@ -234,6 +318,8 @@ class ElasticsearchService {
         try {
             const {
                 systemId,
+                chatId,
+                msgThreadId,
                 transactionId,
                 status,
                 transactionType,
@@ -248,7 +334,7 @@ class ElasticsearchService {
             }
 
             // Get Elasticsearch URL for this system
-            const elasticsearchUrl = await this.getElasticsearchUrl(systemId);
+            const elasticsearchUrl = await this.getElasticsearchUrl(systemId, chatId, msgThreadId);
             const searchUrl = `${elasticsearchUrl}/_search`;
 
             // Build Elasticsearch query for transactions
@@ -427,7 +513,7 @@ class ElasticsearchService {
      * Accepts a full Elasticsearch query object following the provided format
      * Now uses dynamic Elasticsearch URL per system
      */
-    async executeCustomQuery(queryData, systemId = null, userPermissions = []) {
+    async executeCustomQuery(queryData, systemId = null, userPermissions = [], chatId = null, msgThreadId = null) {
         try {
             // Validate query structure
             if (!queryData || !queryData.query) {
@@ -439,7 +525,7 @@ class ElasticsearchService {
             }
 
             // Get Elasticsearch URL for this system
-            const elasticsearchUrl = await this.getElasticsearchUrl(systemId);
+            const elasticsearchUrl = await this.getElasticsearchUrl(systemId, chatId, msgThreadId);
             const searchUrl = `${elasticsearchUrl}/_search`;
 
             // Add system isolation if systemId is provided
