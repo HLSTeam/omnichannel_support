@@ -1,0 +1,80 @@
+name: Unified Inbox CICD
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        options:
+          - backend_only
+          - frontend_only
+          - both
+        required: true
+        type: choice
+        description: Choose build type
+      environment:
+        options:
+          - development
+          - staging
+          - production
+        required: true
+        type: choice
+        description: Choose deployment environment
+        default: 'development'
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.service == 'backend_only' || github.event.inputs.service == 'both' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Login Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+        
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      id: buildx
+      
+    - name: Build and Push Backend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/unified-inbox-backend
+        file: ./src/unified-inbox-backend/Dockerfile
+        builder: ${{ steps.buildx.outputs.name }}
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/nt:unified-inbox-backend-${{ github.event.inputs.environment }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.service == 'frontend_only' || github.event.inputs.service == 'both' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Login Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+        
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      id: buildx
+      
+    - name: Build and Push Frontend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/unified-inbox-frontend
+        file: ./src/unified-inbox-frontend/Dockerfile
+        builder: ${{ steps.buildx.outputs.name }}
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/nt:unified-inbox-frontend-${{ github.event.inputs.environment }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
