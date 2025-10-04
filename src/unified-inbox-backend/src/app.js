@@ -25,7 +25,12 @@ const httpServer = createServer(app); // <-- Tạo một server HTTP
 const io = initIo(httpServer); // Khởi tạo Socket.IO từ module riêng
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  credentials: false,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Routes
