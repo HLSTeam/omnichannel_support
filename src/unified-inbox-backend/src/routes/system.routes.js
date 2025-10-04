@@ -3,7 +3,7 @@ const router = express.Router();
 import { protect, adminOnly } from '../middleware/protect.middleware.js';
 
 // Import các hàm controller đã viết ở trên
-import { createSystem, getAllSystems, updateSystem } from '../controllers/system.controller.js';
+import { createSystem, getAllSystems, updateSystem, deleteSystem } from '../controllers/system.controller.js';
 import { checkLogs, checkTransactions } from '../controllers/systems.controller.js';
 
 // Định nghĩa các endpoints
@@ -18,6 +18,9 @@ router.get('/public', getAllSystems);
 
 
 router.put('/:id', protect, adminOnly, updateSystem);
+
+// DELETE a system
+router.delete('/:id', protect, adminOnly, deleteSystem);
 
 // 🆕 NEW SYSTEM-AWARE ENDPOINTS
 /**

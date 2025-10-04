@@ -82,16 +82,28 @@ export const notifyAdminTeam = async (ticket) => {
     const priority = (ticket.priority || 'MEDIUM').toUpperCase();
     const rules = PRIORITY_NOTIFICATION_RULES[priority] || PRIORITY_NOTIFICATION_RULES.MEDIUM;
     
-    // Create notification record in database
-    const notificationRecord = await prisma.notificationLog.create({
+    // Create notification record in database using existing model
+    // For now, use first active admin telegram group as default
+    const adminGroup = await prisma.telegram_groups.findFirst({
+      where: { 
+        groupType: 'ADMIN',
+        isActive: true 
+      }
+    });
+    
+    if (!adminGroup) {
+      throw new Error('No active admin Telegram group found for notifications');
+    }
+
+    const notificationRecord = await prisma.notification_logs.create({
       data: {
-        ticketId: ticket.id,
-        message: message,
-        priority: priority,
-        channels: rules.channels,
-        status: 'PENDING',
-        retryCount: 0,
-        maxRetries: rules.retryCount
+        telegramGroupId: adminGroup.id,
+        messageContent: message,
+        messageType: 'TICKET_CREATED',
+        priority: priority.toLowerCase(),
+        status: 'pending',
+        referenceType: 'TICKET',
+        referenceId: ticket.id
       }
     });
 
@@ -128,9 +140,9 @@ const processNotification = async (notificationId, ticket, rules) => {
     console.log(`🔄 Processing notification: ${notificationId}`);
     
     // Update status to PROCESSING
-    await prisma.notificationLog.update({
+    await prisma.notification_logs.update({
       where: { id: notificationId },
-      data: { status: 'PROCESSING' }
+      data: { status: 'processing' }
     });
 
     // Send to each channel
@@ -140,25 +152,17 @@ const processNotification = async (notificationId, ticket, rules) => {
       } catch (channelError) {
         console.error(`❌ Channel ${channel} failed:`, channelError);
         
-        // Log channel failure
-        await prisma.notificationChannelLog.create({
-          data: {
-            notificationId: notificationId,
-            channel: channel,
-            status: 'FAILED',
-            error: channelError.message,
-            retryCount: 0
-          }
-        });
+        // For now, just log the channel failure without creating channel log
+        // TODO: Create separate model for channel logs when needed
       }
     }
 
     // Update notification status to COMPLETED
-    await prisma.notificationLog.update({
+    await prisma.notification_logs.update({
       where: { id: notificationId },
       data: { 
-        status: 'COMPLETED',
-        processedAt: new Date()
+        status: 'sent',
+        sentAt: new Date()
       }
     });
 
@@ -168,35 +172,21 @@ const processNotification = async (notificationId, ticket, rules) => {
     console.error(`❌ Error processing notification ${notificationId}:`, error);
     
     // Update status to FAILED
-    await prisma.notificationLog.update({
+    await prisma.notification_logs.update({
       where: { id: notificationId },
       data: { 
-        status: 'FAILED',
-        error: error.message
+        status: 'failed',
+        errorMessage: error.message
       }
     });
 
-    // Retry if possible
-    const notification = await prisma.notificationLog.findUnique({
+    // Get notification for retry logic
+    const notification = await prisma.notification_logs.findUnique({
       where: { id: notificationId }
     });
 
-    if (notification && notification.retryCount < notification.maxRetries) {
-      console.log(`🔄 Retrying notification ${notificationId} (${notification.retryCount + 1}/${notification.maxRetries})`);
-      
-      await prisma.notificationLog.update({
-        where: { id: notificationId },
-        data: { 
-          retryCount: notification.retryCount + 1,
-          status: 'PENDING'
-        }
-      });
-
-      // Retry after delay
-      setTimeout(async () => {
-        await processNotification(notificationId, ticket, rules);
-      }, 5000); // 5 second delay for retry
-    }
+    // For now, skip retry logic since current model doesn't have retryCount field
+    // TODO: Implement retry logic when proper notification model is created
   }
 };
 
@@ -229,15 +219,8 @@ const sendTelegramNotification = async (ticket, notificationId) => {
   // For now, just log the action
   console.log(`📱 Telegram notification for ticket: ${ticket.id}`);
   
-  // Log success
-  await prisma.notificationChannelLog.create({
-    data: {
-      notificationId: notificationId,
-      channel: NOTIFICATION_CHANNELS.TELEGRAM,
-      status: 'SENT',
-      sentAt: new Date()
-    }
-  });
+  // Just log success without database record for now
+  // TODO: Implement proper channel logging when model is available
   
   return { success: true, channel: 'telegram' };
 };
@@ -249,15 +232,8 @@ const sendEmailNotification = async (ticket, notificationId) => {
   // TODO: Implement Email integration
   console.log(`📧 Email notification for ticket: ${ticket.id}`);
   
-  // Log success
-  await prisma.notificationChannelLog.create({
-    data: {
-      notificationId: notificationId,
-      channel: NOTIFICATION_CHANNELS.EMAIL,
-      status: 'SENT',
-      sentAt: new Date()
-    }
-  });
+  // Just log success without database record for now
+  // TODO: Implement proper channel logging when model is available
   
   return { success: true, channel: 'email' };
 };
@@ -269,15 +245,8 @@ const sendSlackNotification = async (ticket, notificationId) => {
   // TODO: Implement Slack integration
   console.log(`💬 Slack notification for ticket: ${ticket.id}`);
   
-  // Log success
-  await prisma.notificationChannelLog.create({
-    data: {
-      notificationId: notificationId,
-      channel: NOTIFICATION_CHANNELS.SLACK,
-      status: 'SENT',
-      sentAt: new Date()
-    }
-  });
+  // Just log success without database record for now
+  // TODO: Implement proper channel logging when model is available
   
   return { success: true, channel: 'slack' };
 };
@@ -287,7 +256,7 @@ const sendSlackNotification = async (ticket, notificationId) => {
  */
 export const getNotificationStats = async () => {
   try {
-    const stats = await prisma.notificationLog.groupBy({
+    const stats = await prisma.notification_logs.groupBy({
       by: ['status'],
       _count: {
         status: true

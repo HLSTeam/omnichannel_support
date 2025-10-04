@@ -13,6 +13,7 @@ import inboundRoutes from './routes/inbound.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import broadcastRoutes from './routes/broadcast.routes.js';
 import telegramGroupsRoutes from './routes/telegram-groups.routes.js';
+import groupTopicsRoutes from './routes/group-topics.routes.js';
 import helpdeskRoutes from './routes/helpdesk.routes.js';
 import agentsRoutes from './routes/agents.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
@@ -24,7 +25,12 @@ const httpServer = createServer(app); // <-- Tạo một server HTTP
 const io = initIo(httpServer); // Khởi tạo Socket.IO từ module riêng
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  credentials: false,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Routes
@@ -37,6 +43,7 @@ app.use('/api/v1/inbound', inboundRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/broadcast', broadcastRoutes);
 app.use('/api/v1/telegram-groups', telegramGroupsRoutes);
+app.use('/api/v1/group-topics', groupTopicsRoutes);
 app.use('/api/v1/helpdesk', helpdeskRoutes);
 app.use('/api/v1/agents', agentsRoutes);
 app.use('/api/v1/notifications', notificationRoutes);

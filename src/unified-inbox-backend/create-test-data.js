@@ -53,7 +53,7 @@ async function createTestData() {
     console.log('✅ Conversation:', conversation.name);
     
     // Tạo test ticket
-    const ticket = await prisma.helpdeskTicket.create({
+    const ticket = await prisma.helpdesk_tickets.create({
       data: {
         title: 'Test Ticket 1',
         description: 'This is a test ticket for testing the helpdesk system',
@@ -69,7 +69,7 @@ async function createTestData() {
     console.log('✅ Ticket created:', ticket.title);
     
     // Tạo test comment
-    const comment = await prisma.ticketComment.create({
+    const comment = await prisma.ticket_comments.create({
       data: {
         content: 'This is a test comment',
         ticketId: ticket.id,

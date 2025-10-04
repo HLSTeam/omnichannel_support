@@ -116,6 +116,13 @@
                   </button>
                   
                   <button
+                    @click="manageTopics(group)"
+                    class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-md text-xs"
+                  >
+                    📂 Topics ({{ group.group_topics?.length || 0 }})
+                  </button>
+                  
+                  <button
                     @click="toggleGroupStatus(group)"
                     :class="group.isActive ? 'text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100' : 'text-green-600 hover:text-green-900 bg-green-50 hover:bg-green-100'"
                     class="px-3 py-1 rounded-md text-xs"
@@ -407,6 +414,238 @@
       </div>
     </div>
 
+    <!-- Topic Management Modal -->
+    <div v-if="showTopicModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div class="relative top-10 mx-auto p-5 border w-4/5 max-w-4xl shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">📂 Quản Lý Topics</h3>
+            <button
+              @click="showTopicModal = false"
+              class="text-gray-400 hover:text-gray-600"
+            >
+              <span class="text-2xl">×</span>
+            </button>
+          </div>
+          
+          <div v-if="selectedGroupForTopics" class="space-y-6">
+            <!-- Group Info -->
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <h4 class="font-medium text-gray-900 mb-2">
+                {{ selectedGroupForTopics.groupName }}
+              </h4>
+              <p class="text-sm text-gray-600">
+                Loại: {{ getGroupTypeLabel(selectedGroupForTopics.groupType) }} | 
+                Chat ID: {{ selectedGroupForTopics.chatId }}
+              </p>
+            </div>
+
+            <!-- Add New Topic Form -->
+            <div class="border border-gray-200 rounded-lg p-4">
+              <h5 class="font-medium text-gray-700 mb-3">➕ Thêm Topic Mới</h5>
+              <form @submit.prevent="addTopic" class="space-y-3">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      Tên Topic *
+                    </label>
+                    <input
+                      v-model="newTopic.topicName"
+                      type="text"
+                      required
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="VD: Chăm sóc khách hàng"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      System *
+                    </label>
+                    <select
+                      v-model="newTopic.systemId"
+                      required
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Chọn system</option>
+                      <option v-for="system in availableSystems" :key="system.id" :value="system.id">
+                        {{ system.name }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      Topic ID (Telegram)
+                    </label>
+                    <input
+                      v-model="newTopic.topicId"
+                      type="text"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Thread ID từ Telegram"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      Mô tả
+                    </label>
+                    <input
+                      v-model="newTopic.description"
+                      type="text"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Mô tả ngắn gọn"
+                    />
+                  </div>
+                </div>
+                
+                <div class="flex justify-end">
+                  <button
+                    type="submit"
+                    :disabled="isAddingTopic"
+                    class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50 text-sm"
+                  >
+                    {{ isAddingTopic ? '⏳ Đang thêm...' : '➕ Thêm Topic' }}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Existing Topics List -->
+            <div>
+              <h5 class="font-medium text-gray-700 mb-3">📋 Danh Sách Topics ({{ groupTopics.length }})</h5>
+              <div v-if="groupTopics.length > 0" class="space-y-2">
+                <div v-for="topic in groupTopics" :key="topic.id" class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
+                  <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                      <h6 class="font-medium text-gray-900">{{ topic.topicName }}</h6>
+                      <p class="text-sm text-gray-600 mt-1">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          {{ topic.System?.name || 'Unknown System' }}
+                        </span>
+                        <span v-if="topic.topicId" class="ml-2 text-gray-500">
+                          ID: {{ topic.topicId }}
+                        </span>
+                      </p>
+                      <p v-if="topic.description" class="text-sm text-gray-500 mt-1">
+                        {{ topic.description }}
+                      </p>
+                    </div>
+                    <div class="flex space-x-2 ml-4">
+                      <button
+                        @click="editTopic(topic)"
+                        class="text-blue-600 hover:text-blue-900 text-xs"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        @click="deleteTopic(topic)"
+                        class="text-red-600 hover:text-red-900 text-xs"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-center py-6 text-gray-500">
+                Chưa có topic nào. Hãy thêm topic đầu tiên!
+              </div>
+            </div>
+
+            <!-- Close Button -->
+            <div class="flex justify-end">
+              <button
+                @click="showTopicModal = false"
+                class="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md text-sm"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Topic Modal -->
+    <div v-if="showEditTopicModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-[60]">
+      <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">✏️ Sửa Topic</h3>
+          
+          <form @submit.prevent="updateTopic" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Tên Topic
+              </label>
+              <input
+                v-model="editingTopic.topicName"
+                type="text"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                System
+              </label>
+              <select
+                v-model="editingTopic.systemId"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option v-for="system in availableSystems" :key="system.id" :value="system.id">
+                  {{ system.name }}
+                </option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Topic ID (Telegram)
+              </label>
+              <input
+                v-model="editingTopic.topicId"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Mô tả
+              </label>
+              <textarea
+                v-model="editingTopic.description"
+                rows="2"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              ></textarea>
+            </div>
+            
+            <div class="flex justify-end space-x-3">
+              <button
+                type="button"
+                @click="showEditTopicModal = false"
+                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                :disabled="isUpdatingTopic"
+                class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {{ isUpdatingTopic ? 'Đang cập nhật...' : 'Cập nhật' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <!-- Success/Error Messages -->
     <div v-if="message" :class="messageType === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700'" class="fixed top-4 right-4 border px-4 py-3 rounded z-50">
       {{ message }}
@@ -437,6 +676,22 @@ export default {
     const selectedGroupForPermissions = ref(null);
     const groupPermissions = ref([]);
     const isSavingPermissions = ref(false);
+
+    // Topic management
+    const showTopicModal = ref(false);
+    const showEditTopicModal = ref(false);
+    const selectedGroupForTopics = ref(null);
+    const groupTopics = ref([]);
+    const availableSystems = ref([]);
+    const isAddingTopic = ref(false);
+    const isUpdatingTopic = ref(false);
+    const newTopic = ref({
+      topicName: '',
+      systemId: '',
+      topicId: '',
+      description: ''
+    });
+    const editingTopic = ref({});
 
     // New group form
     const newGroup = ref({
@@ -728,9 +983,140 @@ export default {
       return `inline-flex px-2 py-1 text-xs font-semibold rounded-full ${classes[type] || 'bg-gray-100 text-gray-800'}`;
     };
 
+    // Topic management methods
+    const loadSystems = async () => {
+      try {
+        const response = await api.get('/systems');
+        // API returns { status: 'success', data: [...] }
+        if (response.data && response.data.status === 'success') {
+          availableSystems.value = response.data.data || [];
+        }
+      } catch (error) {
+        console.error('Error loading systems:', error);
+        showMessage('Lỗi khi tải danh sách systems', 'error');
+      }
+    };
+
+    const manageTopics = async (group) => {
+      selectedGroupForTopics.value = group;
+      groupTopics.value = group.group_topics || [];
+      showTopicModal.value = true;
+      
+      // Reset new topic form
+      newTopic.value = {
+        topicName: '',
+        systemId: '',
+        topicId: '',
+        description: ''
+      };
+      
+      // Load systems if not already loaded
+      if (availableSystems.value.length === 0) {
+        await loadSystems();
+      }
+    };
+
+    const addTopic = async () => {
+      if (!selectedGroupForTopics.value) return;
+      
+      try {
+        isAddingTopic.value = true;
+        const response = await api.post('/group-topics', {
+          ...newTopic.value,
+          groupId: selectedGroupForTopics.value.id
+        });
+        
+        if (response.data && response.data.success) {
+          showMessage('Thêm topic thành công!', 'success');
+          
+          // Reset form
+          newTopic.value = {
+            topicName: '',
+            systemId: '',
+            topicId: '',
+            description: ''
+          };
+          
+          // Reload topics
+          const topicsResponse = await api.get(`/group-topics?groupId=${selectedGroupForTopics.value.id}`);
+          if (topicsResponse.data && topicsResponse.data.success) {
+            groupTopics.value = topicsResponse.data.data || [];
+          }
+          
+          // Reload groups to update the count
+          await loadGroups();
+        }
+      } catch (error) {
+        console.error('Error adding topic:', error);
+        showMessage(error.response?.data?.error || 'Lỗi khi thêm topic', 'error');
+      } finally {
+        isAddingTopic.value = false;
+      }
+    };
+
+    const editTopic = (topic) => {
+      editingTopic.value = { ...topic };
+      showEditTopicModal.value = true;
+    };
+
+    const updateTopic = async () => {
+      try {
+        isUpdatingTopic.value = true;
+        const response = await api.put(`/group-topics/${editingTopic.value.id}`, {
+          topicName: editingTopic.value.topicName,
+          systemId: editingTopic.value.systemId,
+          topicId: editingTopic.value.topicId,
+          description: editingTopic.value.description
+        });
+        
+        if (response.data && response.data.success) {
+          showMessage('Cập nhật topic thành công!', 'success');
+          showEditTopicModal.value = false;
+          
+          // Reload topics
+          const topicsResponse = await api.get(`/group-topics?groupId=${selectedGroupForTopics.value.id}`);
+          if (topicsResponse.data && topicsResponse.data.success) {
+            groupTopics.value = topicsResponse.data.data || [];
+          }
+          
+          // Reload groups
+          await loadGroups();
+        }
+      } catch (error) {
+        console.error('Error updating topic:', error);
+        showMessage(error.response?.data?.error || 'Lỗi khi cập nhật topic', 'error');
+      } finally {
+        isUpdatingTopic.value = false;
+      }
+    };
+
+    const deleteTopic = async (topic) => {
+      if (!confirm(`Bạn có chắc muốn xóa topic "${topic.topicName}"?`)) {
+        return;
+      }
+      
+      try {
+        await api.delete(`/group-topics/${topic.id}`);
+        showMessage('Xóa topic thành công!', 'success');
+        
+        // Reload topics
+        const topicsResponse = await api.get(`/group-topics?groupId=${selectedGroupForTopics.value.id}`);
+        if (topicsResponse.data && topicsResponse.data.success) {
+          groupTopics.value = topicsResponse.data.data || [];
+        }
+        
+        // Reload groups to update the count
+        await loadGroups();
+      } catch (error) {
+        console.error('Error deleting topic:', error);
+        showMessage('Lỗi khi xóa topic', 'error');
+      }
+    };
+
     // Lifecycle
     onMounted(() => {
       loadGroups();
+      loadSystems();
     });
 
     return {
@@ -769,7 +1155,22 @@ export default {
       groupPermissions,
       isSavingPermissions,
       availablePermissions,
-      permissionTemplates
+      permissionTemplates,
+      // Topic management
+      manageTopics,
+      addTopic,
+      editTopic,
+      updateTopic,
+      deleteTopic,
+      showTopicModal,
+      showEditTopicModal,
+      selectedGroupForTopics,
+      groupTopics,
+      availableSystems,
+      isAddingTopic,
+      isUpdatingTopic,
+      newTopic,
+      editingTopic
     };
   }
 };
@@ -881,46 +1282,6 @@ export default {
   .py-1 {
     padding-top: 0.25rem;
     padding-bottom: 0.25rem;
-  }
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .telegram-group-manager {
-    background-color: #1f2937;
-    color: #f9fafb;
-  }
-  
-  .bg-white {
-    background-color: #374151;
-  }
-  
-  .text-gray-800 {
-    color: #f9fafb;
-  }
-  
-  .text-gray-600 {
-    color: #d1d5db;
-  }
-  
-  .text-gray-700 {
-    color: #e5e7eb;
-  }
-  
-  .text-gray-900 {
-    color: #f9fafb;
-  }
-  
-  .border-gray-300 {
-    border-color: #4b5563;
-  }
-  
-  .bg-gray-50 {
-    background-color: #4b5563;
-  }
-  
-  .bg-gray-100 {
-    background-color: #6b7280;
   }
 }
 
