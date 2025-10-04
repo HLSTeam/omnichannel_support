@@ -1,20 +1,22 @@
-# Dockerfile cho unified-inbox-frontend (Vue.js)
-FROM node:18-alpine
+FROM node:20-alpine AS builder
 
-# Thiết lập thư mục làm việc
 WORKDIR /app
 
-# Copy package files
 COPY package.json package-lock.json ./
-
-# Cài đặt dependencies
 RUN npm install
 
-# Copy toàn bộ source code
 COPY . .
+RUN npm run build
 
-# Expose port (port mặc định của Vue dev server)
-EXPOSE 8080
+# Stage 2: Production với Nginx
+FROM nginx:alpine
 
-# Chạy ứng dụng Vue.js
-CMD ["npm", "run", "serve"]
+# Copy build files từ stage builder
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
