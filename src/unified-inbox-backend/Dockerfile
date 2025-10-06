@@ -1,5 +1,5 @@
 # Dockerfile cho Backend Node.js
-FROM node:18-alpine
+FROM node:20-alpine AS builder
 
 # Thiết lập thư mục làm việc
 WORKDIR /app
