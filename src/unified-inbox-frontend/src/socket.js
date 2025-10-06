@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 
 // URL của backend server
-const URL = 'https://api-support.ninetechvn.com';
+const URL = 'https://support.ninetechvn.com';
 
 const socket = io(URL, {
   autoConnect: false // Chỉ kết nối khi chúng ta gọi socket.connect()
