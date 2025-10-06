@@ -26,8 +26,7 @@ const io = initIo(httpServer); // Khởi tạo Socket.IO từ module riêng
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://support.ninetechvn.com'],
-  credentials: true,
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
