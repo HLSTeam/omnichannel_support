@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: 'https://api-support.ninetechvn.com/api/v1',
+  baseURL: 'http://localhost:3000/api/v1',
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
